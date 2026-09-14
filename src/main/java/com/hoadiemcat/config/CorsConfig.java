@@ -24,7 +24,10 @@ public class CorsConfig {
         config.setAllowCredentials(true);
         List<String> origins = Arrays.asList(allowedOrigins.split(","));
         config.setAllowedOrigins(origins);
-        config.setAllowedHeaders(Arrays.asList("Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"));
+        config.setAllowedHeaders(Arrays.asList(
+                "Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With",
+                "X-Table-Session-Token", "X-Table-Session", "x-table-session-token", "x-table-session"
+        ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setMaxAge(3600L);
 

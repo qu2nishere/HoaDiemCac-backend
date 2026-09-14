@@ -32,13 +32,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = getJwtFromRequest(request);
 
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
-                String username = tokenProvider.getUsernameFromJwt(jwt);
+                io.jsonwebtoken.Claims claims = tokenProvider.getClaimsFromJwt(jwt);
+                String username = claims.getSubject();
+                String role = claims.get("role", String.class);
+                java.util.List<org.springframework.security.core.GrantedAuthority> authorities = java.util.Collections.emptyList();
+                if (StringUtils.hasText(role)) {
+                    String roleAuthority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
+                    authorities = java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority(roleAuthority));
+                }
 
-                // Basic authentication token (can be replaced with UserDetails once UserService is created)
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         username,
                         null,
-                        Collections.emptyList()
+                        authorities
                 );
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 

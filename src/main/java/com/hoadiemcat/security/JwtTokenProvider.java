@@ -57,14 +57,16 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public String getUsernameFromJwt(String token) {
-        Claims claims = Jwts.parser()
+    public Claims getClaimsFromJwt(String token) {
+        return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
 
-        return claims.getSubject();
+    public String getUsernameFromJwt(String token) {
+        return getClaimsFromJwt(token).getSubject();
     }
 
     public boolean validateToken(String token) {

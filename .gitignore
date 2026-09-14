@@ -5,11 +5,10 @@ target/
 # Log files
 *.log
 
-# Sensitive environment and configuration files
+# Sensitive environment files
 .env
 .env.local
-application.yml
-src/main/resources/application.yml
+.env.*.local
 
 # Package files
 *.jar
