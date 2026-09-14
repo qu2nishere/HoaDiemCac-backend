@@ -1,0 +1,153 @@
+client/
+├── public/                       # Tài nguyên công khai (favicon, manifest, sound effects)
+│   ├── favicon.svg
+│   └── sounds/
+│       └── ting-ting.mp3         # Chuông báo khi có order mới vào bếp
+│
+├── src/
+│   ├── assets/                   # Hình ảnh, icons SVG dùng trong app
+│   │   ├── images/
+│   │   └── icons/
+│   │
+│   ├── config/                   # Cấu hình môi trường và hằng số tĩnh
+│   │   ├── env.js                # Đọc và kiểm tra VITE_API_URL, VITE_WS_URL
+│   │   └── constants.js          # Khai báo enum: ORDER_STATUS, TABLE_STATUS, ROLES
+│   │
+│   ├── lib/                      # Cấu hình các thư viện bên thứ 3
+│   │   ├── axios.js              # Instance Axios cấu hình sẵn BaseURL, Header, Interceptors
+│   │   └── websocket.js          # Kết nối STOMP Client over SockJS lắng nghe realtime
+│   │
+│   # -------------------------------------------------------------------------
+│   # CÁC THÀNH PHẦN GIAO DIỆN DÙNG CHUNG (SHARED UI)
+│   # -------------------------------------------------------------------------
+│   ├── components/
+│   │   ├── ui/                   # Reusable "Dumb" Components (Tailwind CSS)
+│   │   │   ├── Button.jsx        # Nút bấm chuẩn hóa các biến thể (primary, danger, outline)
+│   │   │   ├── Input.jsx         # Ô nhập liệu chuẩn hóa
+│   │   │   ├── Modal.jsx         # Hộp thoại popup
+│   │   │   ├── Badge.jsx         # Nhãn trạng thái (Đang chờ, Đang nấu, Đã xong)
+│   │   │   ├── Spinner.jsx       # Vòng xoay loading
+│   │   │   └── Card.jsx
+│   │   │
+│   │   ├── feedback/             # Thành phần thông báo
+│   │   │   ├── Toast.jsx         # Thông báo nổi góc màn hình
+│   │   │   └── ErrorBoundary.jsx # Bắt lỗi chống crash ứng dụng
+│   │   │
+│   │   └── navigation/           # 👉 THANH ĐIỀU HƯỚNG VÀ HEADER DÙNG CHUNG
+│   │       ├── CustomerHeader.jsx# Header khách: Số bàn B01, chuông gọi phục vụ, icon giỏ hàng
+│   │       ├── KitchenHeader.jsx # Header bếp: Đồng hồ thời gian thực, nút bật/tắt âm thanh
+│   │       ├── AdminHeader.jsx   # Topbar quản trị: Avatar, tên tài khoản, nút đăng xuất
+│   │       └── AdminSidebar.jsx  # Thanh menu trái điều hướng các trang quản lý
+│   │
+│   # -------------------------------------------------------------------------
+│   # KHUNG GIAO DIỆN CỐ ĐỊNH (SHELL / WRAPPER)
+│   # -------------------------------------------------------------------------
+│   ├── layouts/
+│   │   ├── CustomerLayout.jsx    # Khung di động cho khách: CustomerHeader + <Outlet />
+│   │   ├── KitchenLayout.jsx     # Khung màn hình ngang KDS cho bếp: KitchenHeader + <Outlet />
+│   │   └── AdminLayout.jsx       # Khung quản trị: AdminSidebar + AdminHeader + <Outlet />
+│   │
+│   # -------------------------------------------------------------------------
+│   # MODULES NGHIỆP VỤ ĐỘC LẬP (VERTICAL SLICES)
+│   # -------------------------------------------------------------------------
+│   ├── features/
+│   │   ├── auth/                 # Xác thực & Phân quyền nhân viên/quản lý
+│   │   │   ├── api/authApi.js
+│   │   │   ├── components/LoginForm.jsx
+│   │   │   └── index.js
+│   │   │
+│   │   ├── menu/                 # Thực đơn, lọc danh mục, chi tiết món
+│   │   │   ├── api/menuApi.js
+│   │   │   ├── components/
+│   │   │   │   ├── CategoryTabs.jsx
+│   │   │   │   ├── FoodCard.jsx
+│   │   │   │   └── FoodDetailModal.jsx
+│   │   │   └── index.js
+│   │   │
+│   │   ├── cart/                 # Giỏ hàng dùng chung thời gian thực
+│   │   │   ├── api/cartApi.js
+│   │   │   ├── components/
+│   │   │   │   ├── CartItem.jsx
+│   │   │   │   ├── CartDrawer.jsx
+│   │   │   │   └── CartFloatingButton.jsx
+│   │   │   ├── hooks/useCartSync.js # Lắng nghe WebSocket khi người cùng bàn thêm món
+│   │   │   └── index.js
+│   │   │
+│   │   ├── orders/               # Đặt món & Theo dõi tiến độ phục vụ
+│   │   │   ├── api/orderApi.js
+│   │   │   ├── components/
+│   │   │   │   ├── OrderTimeline.jsx
+│   │   │   │   └── OrderItemStatus.jsx
+│   │   │   └── index.js
+│   │   │
+│   │   ├── kitchen/              # Điều phối bếp chuẩn FIFO
+│   │   │   ├── api/kitchenApi.js
+│   │   │   ├── components/
+│   │   │   │   ├── KdsOrderCard.jsx    # Thẻ đơn món kèm bộ đếm thời gian
+│   │   │   │   └── OutOfStockButton.jsx# Nút báo hết món khẩn cấp
+│   │   │   ├── hooks/useKitchenSocket.js
+│   │   │   └── index.js
+│   │   │
+│   │   ├── tables/               # Sơ đồ bàn & Quản lý Dynamic QR Code
+│   │   │   ├── api/tableApi.js
+│   │   │   ├── components/
+│   │   │   │   ├── TableGrid.jsx
+│   │   │   │   └── QrCodeModal.jsx     # Tạo và tải ảnh mã QR bàn
+│   │   │   └── index.js
+│   │   │
+│   │   └── payment/              # Thanh toán VietQR Napas247 / Tiền mặt
+│   │       ├── api/paymentApi.js
+│   │       ├── components/VietQrModal.jsx
+│   │       └── index.js
+│   │
+│   # -------------------------------------------------------------------------
+│   # CÁC MÀN HÌNH NỘI DUNG (ROUTER OUTLETS)
+│   # -------------------------------------------------------------------------
+│   ├── pages/
+│   │   ├── customer/             # Các trang cho khách tại bàn
+│   │   │   ├── MenuPage.jsx      # Xem thực đơn
+│   │   │   ├── CartPage.jsx      # Giỏ hàng & xác nhận gửi bếp
+│   │   │   └── OrderStatusPage.jsx# Xem tiến độ món đang nấu/đã ra
+│   │   │
+│   │   ├── kitchen/
+│   │   │   └── KitchenKdsPage.jsx# Màn hình KDS hàng đợi FIFO
+│   │   │
+│   │   ├── admin/
+│   │   │   ├── DashboardPage.jsx # Thống kê doanh thu, top món
+│   │   │   ├── TableManagePage.jsx# Quản lý trạng thái bàn & mã QR
+│   │   │   └── MenuManagePage.jsx# Thêm/sửa món ăn và danh mục
+│   │   │
+│   │   ├── auth/
+│   │   │   └── LoginPage.jsx
+│   │   └── NotFoundPage.jsx
+│   │
+│   # -------------------------------------------------------------------------
+│   # QUẢN LÝ ĐỊNH TUYẾN & STATE TOÀN CỤC
+│   # -------------------------------------------------------------------------
+│   ├── routes/
+│   │   ├── index.jsx             # Cấu hình danh sách URL và gán vào Layouts tương ứng
+│   │   └── ProtectedRoute.jsx    # Chặn người lạ vào trang Bếp / Admin nếu chưa đăng nhập
+│   │
+│   ├── stores/                   # Quản lý Global State (Zustand siêu nhẹ)
+│   │   ├── useCartStore.js       # Giỏ hàng (danh sách món, số lượng, tổng tiền)
+│   │   ├── useAuthStore.js       # Thông tin user đăng nhập và JWT Token
+│   │   └── useTableSessionStore.js# Lưu mã phiên bàn (sessionToken) hiện tại
+│   │
+│   ├── utils/                    # Hàm tiện ích thuần túy (Pure Functions)
+│   │   ├── formatters.js         # formatCurrencyVND(50000) -> "50.000 ₫"
+│   │   └── validators.js         # Kiểm tra số lượng hợp lệ 1 <= N <= 99
+│   │
+│   ├── test/                     # Setup kiểm thử (Môn Kiểm thử phần mềm)
+│   │   ├── setup.js              # Cấu hình jest-dom cho Vitest
+│   │   └── test-utils.jsx        # Wrapper render kèm Router và Store để test Component
+│   │
+│   ├── App.jsx                   # Bọc ToastProvider, QueryProvider/StoreProvider
+│   ├── index.css                 # Import Tailwind CSS
+│   └── main.jsx                  # Điểm khởi chạy của React DOM
+│
+├── .env.example                  # Khai báo mẫu biến môi trường (VITE_API_BASE_URL,...)
+├── eslint.config.js              # Cấu hình kiểm tra cú pháp mã nguồn
+├── index.html                    # File HTML gốc
+├── package.json                  # Khai báo thư viện & các lệnh chạy (dev, build, test)
+├── tailwind.config.js            # Cấu hình theme màu sắc của nhà hàng
+└── vite.config.js                # Cấu hình Vite, Alias '@', và Vitest
