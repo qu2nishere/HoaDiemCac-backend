@@ -9,7 +9,7 @@ spring:
 
   datasource:
     # Hỗ trợ kết nối Aiven Cloud MySQL qua DB_URL trực tiếp hoặc qua từng biến thành phần
-    url: ${DB_URL:jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:hoadiemcat_db}?useSSL=${DB_SSL:false}&sslMode=${DB_SSL_MODE:PREFERRED}&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    url: ${DB_URL:jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:hoadiemcat_db}?createDatabaseIfNotExist=true&useSSL=${DB_SSL:false}&sslMode=${DB_SSL_MODE:PREFERRED}&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
