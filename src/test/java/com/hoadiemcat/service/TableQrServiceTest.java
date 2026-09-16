@@ -7,7 +7,9 @@ import com.hoadiemcat.entity.enums.TableArea;
 import com.hoadiemcat.entity.enums.TableStatus;
 import com.hoadiemcat.exception.AppException;
 import com.hoadiemcat.exception.ErrorCode;
+import com.hoadiemcat.entity.TableSessionDevice;
 import com.hoadiemcat.repository.RestaurantTableRepository;
+import com.hoadiemcat.repository.TableSessionDeviceRepository;
 import com.hoadiemcat.service.impl.TableQrServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -29,6 +32,9 @@ class TableQrServiceTest {
 
     @Mock
     private RestaurantTableRepository tableRepository;
+
+    @Mock
+    private TableSessionDeviceRepository tableSessionDeviceRepository;
 
     @InjectMocks
     private TableQrServiceImpl tableQrService;
@@ -50,6 +56,7 @@ class TableQrServiceTest {
                 .activeDeviceCount(0)
                 .currentSessionToken("session-token-1")
                 .build();
+        mockTable.setId(1L);
     }
 
     @Test
@@ -64,10 +71,11 @@ class TableQrServiceTest {
     }
 
     @Test
-    @DisplayName("Xác thực mã PIN đúng - Cấp session token & đánh dấu OCCUPIED")
-    void testVerifyPasscode_Success() {
+    @DisplayName("Xác thực mã PIN đúng - Thiết bị đầu tiên trở thành Chủ Bàn (Host)")
+    void testVerifyPasscode_FirstDeviceBecomesHost() {
         when(tableRepository.findByTableNumber("B01")).thenReturn(Optional.of(mockTable));
         when(tableRepository.save(any(RestaurantTable.class))).thenReturn(mockTable);
+        when(tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(mockTable)).thenReturn(Optional.empty());
 
         VerifyPasscodeRequest request = VerifyPasscodeRequest.builder()
                 .passcode("1234")
@@ -81,8 +89,116 @@ class TableQrServiceTest {
         assertEquals(TableStatus.OCCUPIED, response.getStatus());
         assertNotNull(response.getSessionToken());
         assertNotNull(response.getDeviceToken());
+        assertTrue(response.getIsHost());
         assertEquals(1, mockTable.getActiveDeviceCount());
-        verify(tableRepository, times(1)).save(mockTable);
+        verify(tableSessionDeviceRepository, times(1)).save(any(TableSessionDevice.class));
+    }
+
+    @Test
+    @DisplayName("Xác thực mã PIN đúng - Thiết bị vào sau trở thành Thành Viên (Member)")
+    void testVerifyPasscode_SecondDeviceBecomesMember() {
+        mockTable.setActiveDeviceCount(1);
+        when(tableRepository.findByTableNumber("B01")).thenReturn(Optional.of(mockTable));
+        when(tableRepository.save(any(RestaurantTable.class))).thenReturn(mockTable);
+
+        TableSessionDevice existingHost = TableSessionDevice.builder()
+                .table(mockTable)
+                .deviceToken("host-token")
+                .isHost(true)
+                .isActive(true)
+                .connectedAt(LocalDateTime.now())
+                .build();
+        when(tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(mockTable)).thenReturn(Optional.of(existingHost));
+
+        VerifyPasscodeRequest request = VerifyPasscodeRequest.builder()
+                .passcode("1234")
+                .deviceFingerprint("device-xyz")
+                .build();
+
+        VerifyPasscodeResponse response = tableQrService.verifyPasscode("B01", request);
+
+        assertNotNull(response);
+        assertFalse(response.getIsHost());
+        assertEquals(2, mockTable.getActiveDeviceCount());
+        verify(tableSessionDeviceRepository, times(1)).save(any(TableSessionDevice.class));
+    }
+
+    @Test
+    @DisplayName("Chủ Bàn đá thiết bị lạ ra khỏi bàn thành công")
+    void testKickDevice_ByHost_Success() {
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(mockTable));
+        mockTable.setActiveDeviceCount(2);
+
+        TableSessionDevice hostDevice = TableSessionDevice.builder()
+                .table(mockTable)
+                .deviceToken("host-token")
+                .isHost(true)
+                .isActive(true)
+                .build();
+
+        TableSessionDevice targetDevice = TableSessionDevice.builder()
+                .table(mockTable)
+                .deviceToken("troll-token")
+                .isHost(false)
+                .isActive(true)
+                .build();
+
+        when(tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue("host-token")).thenReturn(Optional.of(hostDevice));
+        when(tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue("troll-token")).thenReturn(Optional.of(targetDevice));
+
+        tableQrService.kickDevice("1", "host-token", "troll-token");
+
+        assertFalse(targetDevice.getIsActive());
+        assertEquals(1, mockTable.getActiveDeviceCount());
+        verify(tableSessionDeviceRepository, times(1)).save(targetDevice);
+    }
+
+    @Test
+    @DisplayName("Thành viên thường không thể đá thiết bị khác (Yêu cầu quyền Chủ Bàn)")
+    void testKickDevice_ByMember_ThrowsForbidden() {
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(mockTable));
+
+        TableSessionDevice memberDevice = TableSessionDevice.builder()
+                .table(mockTable)
+                .deviceToken("member-token")
+                .isHost(false)
+                .isActive(true)
+                .build();
+
+        when(tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue("member-token")).thenReturn(Optional.of(memberDevice));
+
+        AppException ex = assertThrows(AppException.class, () -> tableQrService.kickDevice("1", "member-token", "target-token"));
+        assertEquals(ErrorCode.HOST_PERMISSION_REQUIRED, ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("Chuyển quyền Chủ Bàn sang thiết bị khác thành công")
+    void testTransferHost_Success() {
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(mockTable));
+
+        TableSessionDevice currentHost = TableSessionDevice.builder()
+                .table(mockTable)
+                .deviceToken("host-token")
+                .isHost(true)
+                .isActive(true)
+                .build();
+
+        TableSessionDevice memberDevice = TableSessionDevice.builder()
+                .table(mockTable)
+                .deviceToken("member-token")
+                .isHost(false)
+                .isActive(true)
+                .build();
+
+        when(tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue("host-token")).thenReturn(Optional.of(currentHost));
+        when(tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue("member-token")).thenReturn(Optional.of(memberDevice));
+
+        tableQrService.transferHost("1", "host-token", "member-token");
+
+        assertFalse(currentHost.getIsHost());
+        assertTrue(memberDevice.getIsHost());
+        verify(tableSessionDeviceRepository, times(1)).save(currentHost);
+        verify(tableSessionDeviceRepository, times(1)).save(memberDevice);
     }
 
     @Test
