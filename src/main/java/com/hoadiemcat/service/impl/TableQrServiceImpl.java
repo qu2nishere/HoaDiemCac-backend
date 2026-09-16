@@ -106,10 +106,7 @@ public class TableQrServiceImpl implements TableQrService {
     @Transactional
     public TableQrResponse regeneratePasscode(Long id) {
         RestaurantTable table = findTableEntity(id);
-        table.generateNewPasscode();
-        // Cấp luôn phiên token mới để thu hồi token cũ
-        table.setCurrentSessionToken(UUID.randomUUID().toString());
-        table.setActiveDeviceCount(0);
+        resetTableToAvailableSession(table);
         return mapToResponse(tableRepository.save(table));
     }
 
@@ -125,9 +122,10 @@ public class TableQrServiceImpl implements TableQrService {
     @Transactional
     public TableQrResponse updateTableStatus(Long id, TableStatus status) {
         RestaurantTable table = findTableEntity(id);
-        table.setStatus(status);
         if (status == TableStatus.AVAILABLE) {
-            releaseTableSession(id);
+            resetTableToAvailableSession(table);
+        } else {
+            table.setStatus(status);
         }
         return mapToResponse(tableRepository.save(table));
     }
@@ -226,11 +224,18 @@ public class TableQrServiceImpl implements TableQrService {
     @Transactional
     public void releaseTableSession(Long tableId) {
         RestaurantTable table = findTableEntity(tableId);
+        resetTableToAvailableSession(table);
+        tableRepository.save(table);
+    }
+
+    private void resetTableToAvailableSession(RestaurantTable table) {
+        table.setStatus(TableStatus.AVAILABLE);
+        table.setIsOrderLocked(false);
         table.setCurrentSessionToken(UUID.randomUUID().toString()); // Token mới vô hiệu hóa toàn bộ token cũ
         table.generateNewPasscode(); // Sinh PIN mới cho lượt khách kế tiếp
         table.setActiveDeviceCount(0);
         table.setSessionStartedAt(null);
-        tableRepository.save(table);
+        table.resetFailedAttempts();
 
         // Vô hiệu hóa toàn bộ thiết bị cũ của bàn
         List<TableSessionDevice> oldDevices = tableSessionDeviceRepository.findByTable(table);
