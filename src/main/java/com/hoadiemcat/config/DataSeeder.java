@@ -27,6 +27,7 @@ public class DataSeeder implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
     private final CategoryRepository categoryRepository;
     private final MenuItemRepository menuItemRepository;
+    private final com.hoadiemcat.repository.RestaurantTableRepository restaurantTableRepository;
 
     @Override
     @Transactional
@@ -34,6 +35,7 @@ public class DataSeeder implements CommandLineRunner {
         seedAdminUser();
         Map<String, Category> categoryMap = seedCategories();
         seedMenuItems(categoryMap);
+        seedTables();
     }
 
     private void seedAdminUser() {
@@ -131,6 +133,54 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         log.info("✅ Đã khởi tạo thành công {} món ăn mẫu vào Database", dishSeeds.size());
+    }
+
+    private void seedTables() {
+        if (restaurantTableRepository.count() > 0) {
+            log.info("⚡ Đã có {} bàn ăn trong Database, bỏ qua bước khởi tạo bàn.", restaurantTableRepository.count());
+            return;
+        }
+
+        Random random = new Random();
+        List<com.hoadiemcat.entity.RestaurantTable> tables = new ArrayList<>();
+
+        // 10 bàn khu vực chung (B01 -> B10)
+        for (int i = 1; i <= 10; i++) {
+            String num = String.format("%02d", i);
+            String passcode = String.format("%04d", random.nextInt(9000) + 1000);
+            tables.add(com.hoadiemcat.entity.RestaurantTable.builder()
+                    .tableNumber("B" + num)
+                    .name("BÀN " + num)
+                    .area(com.hoadiemcat.entity.enums.TableArea.COMMON)
+                    .capacity(4)
+                    .maxActiveDevices(6)
+                    .status(com.hoadiemcat.entity.enums.TableStatus.AVAILABLE)
+                    .currentPasscode(passcode)
+                    .activeDeviceCount(0)
+                    .isOrderLocked(false)
+                    .failedAttempts(0)
+                    .build());
+        }
+
+        // 10 phòng VIP hoàng gia (VIP11 -> VIP20)
+        for (int i = 11; i <= 20; i++) {
+            String passcode = String.format("%04d", random.nextInt(9000) + 1000);
+            tables.add(com.hoadiemcat.entity.RestaurantTable.builder()
+                    .tableNumber("VIP" + i)
+                    .name("VIP " + i)
+                    .area(com.hoadiemcat.entity.enums.TableArea.VIP)
+                    .capacity(10)
+                    .maxActiveDevices(15)
+                    .status(com.hoadiemcat.entity.enums.TableStatus.AVAILABLE)
+                    .currentPasscode(passcode)
+                    .activeDeviceCount(0)
+                    .isOrderLocked(false)
+                    .failedAttempts(0)
+                    .build());
+        }
+
+        restaurantTableRepository.saveAll(tables);
+        log.info("✅ Đã khởi tạo thành công {} bàn ăn sẵn sàng (AVAILABLE, 0 thiết bị) vào Database", tables.size());
     }
 
     private record DishSeed(
