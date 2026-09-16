@@ -31,4 +31,16 @@ public interface TableQrService {
     boolean validateSessionToken(String sessionToken);
 
     void releaseTableSession(Long tableId);
+
+    List<com.hoadiemcat.dto.response.TableDeviceResponse> getActiveDevices(String tableIdentifier, String currentDeviceToken);
+
+    void kickDevice(String tableIdentifier, String hostDeviceToken, String targetDeviceToken);
+
+    void transferHost(String tableIdentifier, String currentHostToken, String newHostToken);
+
+    List<com.hoadiemcat.dto.response.TableDeviceResponse> getAdminActiveDevices(Long tableId);
+
+    void adminResetHost(Long tableId);
+
+    void adminKickDevice(Long tableId, String targetDeviceToken);
 }

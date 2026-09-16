@@ -15,7 +15,9 @@ public enum ErrorCode {
     INVALID_REQUEST(1005, "Invalid request parameter", HttpStatus.BAD_REQUEST),
     RESOURCE_ALREADY_EXISTS(1006, "Resource already exists", HttpStatus.CONFLICT),
     TABLE_LOCKED(1007, "Bàn đang bị khóa tạm thời hoặc bị khóa gọi món", HttpStatus.FORBIDDEN),
-    DEVICE_LIMIT_EXCEEDED(1008, "Bàn đã đạt giới hạn thiết bị truy cập đồng thời", HttpStatus.TOO_MANY_REQUESTS);
+    DEVICE_LIMIT_EXCEEDED(1008, "Bàn đã đạt giới hạn thiết bị truy cập đồng thời", HttpStatus.TOO_MANY_REQUESTS),
+    HOST_PERMISSION_REQUIRED(1009, "Chỉ Chủ Bàn mới có quyền thực hiện thao tác này", HttpStatus.FORBIDDEN),
+    DEVICE_NOT_FOUND(1010, "Không tìm thấy thiết bị yêu cầu", HttpStatus.NOT_FOUND);
 
     private final int code;
     private final String message;

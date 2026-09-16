@@ -48,4 +48,38 @@ public class TableCustomerController {
         boolean isValid = tableQrService.validateSessionToken(sessionToken);
         return ResponseEntity.ok(ApiResponse.success(isValid));
     }
+
+    @GetMapping("/{identifier}/devices")
+    @Operation(summary = "Lấy danh sách các thiết bị đang kết nối vào bàn")
+    public ResponseEntity<ApiResponse<java.util.List<com.hoadiemcat.dto.response.TableDeviceResponse>>> getActiveDevices(
+            @PathVariable String identifier,
+            @RequestHeader(value = "X-Device-Token", required = false) String currentDeviceToken
+    ) {
+        var devices = tableQrService.getActiveDevices(identifier, currentDeviceToken);
+        return ResponseEntity.ok(ApiResponse.success(devices));
+    }
+
+    @PostMapping("/{identifier}/kick-device")
+    @Operation(summary = "Chủ Bàn đá một thiết bị ra khỏi bàn ăn")
+    public ResponseEntity<ApiResponse<Void>> kickDevice(
+            @PathVariable String identifier,
+            @RequestHeader(value = "X-Device-Token", required = false) String hostDeviceToken,
+            @Valid @RequestBody com.hoadiemcat.dto.request.KickDeviceRequest request
+    ) {
+        String hostToken = hostDeviceToken != null ? hostDeviceToken : request.getHostDeviceToken();
+        tableQrService.kickDevice(identifier, hostToken, request.getTargetDeviceToken());
+        return ResponseEntity.ok(ApiResponse.success("Đã vô hiệu hóa thiết bị thành công.", null));
+    }
+
+    @PostMapping("/{identifier}/transfer-host")
+    @Operation(summary = "Chủ Bàn chuyển quyền Chủ Bàn cho thiết bị khác cùng bàn")
+    public ResponseEntity<ApiResponse<Void>> transferHost(
+            @PathVariable String identifier,
+            @RequestHeader(value = "X-Device-Token", required = false) String currentHostToken,
+            @Valid @RequestBody com.hoadiemcat.dto.request.TransferHostRequest request
+    ) {
+        String hostToken = currentHostToken != null ? currentHostToken : request.getCurrentHostToken();
+        tableQrService.transferHost(identifier, hostToken, request.getNewHostDeviceToken());
+        return ResponseEntity.ok(ApiResponse.success("Đã chuyển quyền Chủ Bàn thành công.", null));
+    }
 }

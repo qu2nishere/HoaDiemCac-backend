@@ -17,6 +17,9 @@ public class VerifyPasscodeResponse {
     private String tableName;
     private String sessionToken;
     private String deviceToken;
+    private String deviceName;
+    private Boolean isHost;
+    private Integer activeDeviceCount;
     private TableStatus status;
     private Boolean isOrderLocked;
     private String message;
