@@ -18,4 +18,6 @@ public class VerifyPasscodeRequest {
     private String passcode;
 
     private String deviceFingerprint;
+
+    private String deviceName;
 }

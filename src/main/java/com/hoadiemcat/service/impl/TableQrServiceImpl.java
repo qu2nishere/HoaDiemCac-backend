@@ -22,12 +22,17 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.hoadiemcat.dto.response.TableDeviceResponse;
+import com.hoadiemcat.entity.TableSessionDevice;
+import com.hoadiemcat.repository.TableSessionDeviceRepository;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TableQrServiceImpl implements TableQrService {
 
     private final RestaurantTableRepository tableRepository;
+    private final TableSessionDeviceRepository tableSessionDeviceRepository;
 
     @Override
     @Transactional
@@ -174,12 +179,35 @@ public class TableQrServiceImpl implements TableQrService {
 
         String deviceToken = UUID.randomUUID().toString();
 
+        // 5. Phân quyền Chủ Bàn (Host) vs Thành Viên (Member)
+        boolean hasActiveHost = tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(table).isPresent();
+        boolean isHost = !hasActiveHost;
+
+        String deviceName = request.getDeviceName();
+        if (deviceName == null || deviceName.isBlank()) {
+            deviceName = isHost ? "Chủ Bàn (Thiết bị 1)" : "Thành Viên (Thiết bị " + (currentDevices + 1) + ")";
+        }
+
+        TableSessionDevice device = TableSessionDevice.builder()
+                .table(table)
+                .deviceToken(deviceToken)
+                .deviceName(deviceName)
+                .deviceFingerprint(request.getDeviceFingerprint())
+                .isHost(isHost)
+                .isActive(true)
+                .connectedAt(LocalDateTime.now())
+                .build();
+        tableSessionDeviceRepository.save(device);
+
         return VerifyPasscodeResponse.builder()
                 .tableId(table.getId())
                 .tableNumber(table.getTableNumber())
                 .tableName(table.getName())
                 .sessionToken(table.getCurrentSessionToken())
                 .deviceToken(deviceToken)
+                .deviceName(deviceName)
+                .isHost(isHost)
+                .activeDeviceCount(currentDevices + 1)
                 .status(table.getStatus())
                 .isOrderLocked(table.getIsOrderLocked())
                 .message("Xác thực mã PIN bàn thành công")
@@ -204,6 +232,134 @@ public class TableQrServiceImpl implements TableQrService {
         table.setActiveDeviceCount(0);
         table.setSessionStartedAt(null);
         tableRepository.save(table);
+
+        // Vô hiệu hóa toàn bộ thiết bị cũ của bàn
+        List<TableSessionDevice> oldDevices = tableSessionDeviceRepository.findByTable(table);
+        for (TableSessionDevice d : oldDevices) {
+            d.setIsActive(false);
+        }
+        tableSessionDeviceRepository.saveAll(oldDevices);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TableDeviceResponse> getActiveDevices(String tableIdentifier, String currentDeviceToken) {
+        RestaurantTable table = findByIdentifier(tableIdentifier);
+        List<TableSessionDevice> devices = tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(table);
+        return devices.stream().map(d -> TableDeviceResponse.builder()
+                .deviceToken(d.getDeviceToken())
+                .deviceName(d.getDeviceName())
+                .isHost(d.getIsHost())
+                .isActive(d.getIsActive())
+                .connectedAt(d.getConnectedAt())
+                .isCurrentDevice(currentDeviceToken != null && currentDeviceToken.equals(d.getDeviceToken()))
+                .build()).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void kickDevice(String tableIdentifier, String hostDeviceToken, String targetDeviceToken) {
+        RestaurantTable table = findByIdentifier(tableIdentifier);
+
+        // 1. Kiểm tra người gọi phải là Host của bàn
+        TableSessionDevice hostDevice = tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue(hostDeviceToken)
+                .orElseThrow(() -> new AppException(ErrorCode.HOST_PERMISSION_REQUIRED));
+        if (!Boolean.TRUE.equals(hostDevice.getIsHost()) || !java.util.Objects.equals(hostDevice.getTable().getId(), table.getId())) {
+            throw new AppException(ErrorCode.HOST_PERMISSION_REQUIRED);
+        }
+
+        // 2. Không thể tự đá chính mình
+        if (hostDeviceToken.equals(targetDeviceToken)) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+
+        // 3. Tìm thiết bị mục tiêu và vô hiệu hóa
+        TableSessionDevice targetDevice = tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue(targetDeviceToken)
+                .orElseThrow(() -> new AppException(ErrorCode.DEVICE_NOT_FOUND));
+        if (!java.util.Objects.equals(targetDevice.getTable().getId(), table.getId())) {
+            throw new AppException(ErrorCode.DEVICE_NOT_FOUND);
+        }
+
+        targetDevice.setIsActive(false);
+        tableSessionDeviceRepository.save(targetDevice);
+
+        int newCount = Math.max(0, (table.getActiveDeviceCount() != null ? table.getActiveDeviceCount() : 1) - 1);
+        table.setActiveDeviceCount(newCount);
+        tableRepository.save(table);
+    }
+
+    @Override
+    @Transactional
+    public void transferHost(String tableIdentifier, String currentHostToken, String newHostToken) {
+        RestaurantTable table = findByIdentifier(tableIdentifier);
+
+        // 1. Xác thực người chuyển phải là Host hiện tại
+        TableSessionDevice currentHost = tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue(currentHostToken)
+                .orElseThrow(() -> new AppException(ErrorCode.HOST_PERMISSION_REQUIRED));
+        if (!Boolean.TRUE.equals(currentHost.getIsHost()) || !java.util.Objects.equals(currentHost.getTable().getId(), table.getId())) {
+            throw new AppException(ErrorCode.HOST_PERMISSION_REQUIRED);
+        }
+
+        // 2. Tìm thiết bị mới
+        TableSessionDevice newHost = tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue(newHostToken)
+                .orElseThrow(() -> new AppException(ErrorCode.DEVICE_NOT_FOUND));
+        if (!java.util.Objects.equals(newHost.getTable().getId(), table.getId())) {
+            throw new AppException(ErrorCode.DEVICE_NOT_FOUND);
+        }
+
+        currentHost.setIsHost(false);
+        newHost.setIsHost(true);
+        tableSessionDeviceRepository.save(currentHost);
+        tableSessionDeviceRepository.save(newHost);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TableDeviceResponse> getAdminActiveDevices(Long tableId) {
+        RestaurantTable table = findTableEntity(tableId);
+        return tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(table).stream()
+                .map(d -> TableDeviceResponse.builder()
+                        .deviceToken(d.getDeviceToken())
+                        .deviceName(d.getDeviceName())
+                        .isHost(d.getIsHost())
+                        .isActive(d.getIsActive())
+                        .connectedAt(d.getConnectedAt())
+                        .isCurrentDevice(false)
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void adminResetHost(Long tableId) {
+        RestaurantTable table = findTableEntity(tableId);
+        List<TableSessionDevice> devices = tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(table);
+        if (!devices.isEmpty()) {
+            for (int i = 0; i < devices.size(); i++) {
+                devices.get(i).setIsHost(i == 0);
+            }
+            tableSessionDeviceRepository.saveAll(devices);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void adminKickDevice(Long tableId, String targetDeviceToken) {
+        RestaurantTable table = findTableEntity(tableId);
+        TableSessionDevice target = tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue(targetDeviceToken)
+                .orElseThrow(() -> new AppException(ErrorCode.DEVICE_NOT_FOUND));
+        if (java.util.Objects.equals(target.getTable().getId(), table.getId())) {
+            target.setIsActive(false);
+            tableSessionDeviceRepository.save(target);
+
+            int newCount = Math.max(0, (table.getActiveDeviceCount() != null ? table.getActiveDeviceCount() : 1) - 1);
+            table.setActiveDeviceCount(newCount);
+            tableRepository.save(table);
+
+            if (Boolean.TRUE.equals(target.getIsHost())) {
+                adminResetHost(tableId);
+            }
+        }
     }
 
     private RestaurantTable findTableEntity(Long id) {

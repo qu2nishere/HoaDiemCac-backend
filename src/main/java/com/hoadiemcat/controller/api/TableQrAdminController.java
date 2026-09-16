@@ -81,4 +81,28 @@ public class TableQrAdminController {
         TableQrResponse updated = tableQrService.updateTableStatus(id, status);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái bàn thành công", updated));
     }
+
+    @GetMapping("/{id}/devices")
+    @Operation(summary = "Xem danh sách thiết bị đang kết nối vào bàn (Admin)")
+    public ResponseEntity<ApiResponse<java.util.List<com.hoadiemcat.dto.response.TableDeviceResponse>>> getDevices(@PathVariable Long id) {
+        var devices = tableQrService.getAdminActiveDevices(id);
+        return ResponseEntity.ok(ApiResponse.success(devices));
+    }
+
+    @PostMapping("/{id}/reset-host")
+    @Operation(summary = "Đặt lại quyền Chủ Bàn cho bàn (Admin)")
+    public ResponseEntity<ApiResponse<Void>> resetHost(@PathVariable Long id) {
+        tableQrService.adminResetHost(id);
+        return ResponseEntity.ok(ApiResponse.success("Đã đặt lại quyền Chủ Bàn thành công", null));
+    }
+
+    @PostMapping("/{id}/kick-device")
+    @Operation(summary = "Đá một thiết bị ra khỏi bàn (Admin)")
+    public ResponseEntity<ApiResponse<Void>> kickDevice(
+            @PathVariable Long id,
+            @RequestBody com.hoadiemcat.dto.request.KickDeviceRequest request
+    ) {
+        tableQrService.adminKickDevice(id, request.getTargetDeviceToken());
+        return ResponseEntity.ok(ApiResponse.success("Đã vô hiệu hóa thiết bị thành công", null));
+    }
 }
