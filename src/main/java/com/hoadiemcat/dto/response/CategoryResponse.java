@@ -16,4 +16,6 @@ public class CategoryResponse {
     private String description;
     private Integer displayOrder;
     private Boolean isActive;
+    private Boolean isSystem;
+    private Long totalItems;
 }
