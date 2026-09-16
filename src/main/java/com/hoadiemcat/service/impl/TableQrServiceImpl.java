@@ -54,8 +54,7 @@ public class TableQrServiceImpl implements TableQrService {
     @Override
     @Transactional(readOnly = true)
     public TableQrResponse getTableByNumber(String tableNumber) {
-        RestaurantTable table = tableRepository.findByTableNumber(tableNumber.toUpperCase())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+        RestaurantTable table = findByIdentifier(tableNumber);
         return mapToResponse(table);
     }
 
@@ -140,14 +139,14 @@ public class TableQrServiceImpl implements TableQrService {
 
         // 1. Kiểm tra khóa tạm thời do brute-force
         if (table.isTemporarilyLocked()) {
-            throw new AppException(ErrorCode.TABLE_LOCKED);
+            throw new AppException(ErrorCode.TABLE_LOCKED, "Bàn đang bị tạm khóa 60 giây do nhập sai mã PIN quá 5 lần. Vui lòng thử lại sau!");
         }
 
         // 2. Kiểm tra giới hạn số thiết bị đồng thời (Anti-abuse)
         int currentDevices = table.getActiveDeviceCount() != null ? table.getActiveDeviceCount() : 0;
         int maxDevices = table.getMaxActiveDevices() != null ? table.getMaxActiveDevices() : 6;
         if (currentDevices >= maxDevices) {
-            throw new AppException(ErrorCode.DEVICE_LIMIT_EXCEEDED);
+            throw new AppException(ErrorCode.DEVICE_LIMIT_EXCEEDED, "Bàn đã đạt giới hạn thiết bị kết nối đồng thời!");
         }
 
         // 3. Kiểm tra mã PIN 4 số
@@ -159,7 +158,7 @@ public class TableQrServiceImpl implements TableQrService {
         if (!actualPasscode.equals(request.getPasscode().trim())) {
             table.recordFailedAttempt();
             tableRepository.save(table);
-            throw new AppException(ErrorCode.INVALID_REQUEST);
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Mã PIN 4 số không chính xác. Vui lòng kiểm tra lại!");
         }
 
         // 4. Nhập đúng: Reset bộ đếm lỗi & Cấp token phiên
@@ -368,15 +367,27 @@ public class TableQrServiceImpl implements TableQrService {
     }
 
     private RestaurantTable findByIdentifier(String identifier) {
-        try {
-            Long id = Long.parseLong(identifier);
-            return tableRepository.findById(id)
-                    .orElseGet(() -> tableRepository.findByTableNumber(identifier.toUpperCase())
-                            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND)));
-        } catch (NumberFormatException e) {
-            return tableRepository.findByTableNumber(identifier.toUpperCase())
+        if (identifier == null || identifier.isBlank()) {
+            throw new AppException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        String clean = identifier.trim().toUpperCase();
+
+        // 1. Tìm chính xác theo tableNumber (VD: "B01", "VIP12")
+        var opt = tableRepository.findByTableNumber(clean);
+        if (opt.isPresent()) return opt.get();
+
+        // 2. Nếu là số thuần túy (VD: "1", "01", "8") -> chuẩn hóa thành "B01", "B08"
+        if (clean.matches("^\\d+$")) {
+            int num = Integer.parseInt(clean);
+            String normalizedNum = String.format("B%02d", num);
+            var optNorm = tableRepository.findByTableNumber(normalizedNum);
+            if (optNorm.isPresent()) return optNorm.get();
+
+            return tableRepository.findById((long) num)
                     .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
         }
+
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
     private TableQrResponse mapToResponse(RestaurantTable table) {
