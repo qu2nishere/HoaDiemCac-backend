@@ -23,6 +23,7 @@ import java.util.Collections;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
+    private final CustomUserDetailsService userDetailsService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -35,10 +36,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 io.jsonwebtoken.Claims claims = tokenProvider.getClaimsFromJwt(jwt);
                 String username = claims.getSubject();
                 String role = claims.get("role", String.class);
-                java.util.List<org.springframework.security.core.GrantedAuthority> authorities = java.util.Collections.emptyList();
+                java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> authorities = java.util.Collections.emptyList();
                 if (StringUtils.hasText(role)) {
                     String roleAuthority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
                     authorities = java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority(roleAuthority));
+                } else if (StringUtils.hasText(username)) {
+                    try {
+                        org.springframework.security.core.userdetails.UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                        authorities = userDetails.getAuthorities();
+                    } catch (Exception e) {
+                        log.warn("Could not load user details for username: {}", username);
+                    }
                 }
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(

@@ -47,8 +47,18 @@ public class AuthServiceImpl implements AuthService {
         user.setLastLoginAt(LocalDateTime.now());
         userRepository.save(user);
 
-        // Generate JWT token
-        String token = jwtTokenProvider.generateToken(user.getUsername());
+        // Generate JWT token with role claim
+        java.util.Map<String, Object> extraClaims = new java.util.HashMap<>();
+        extraClaims.put("role", user.getRole().name());
+        String token = jwtTokenProvider.generateToken(user.getUsername(), extraClaims);
+
+        java.util.List<String> permissions = switch (user.getRole()) {
+            case ADMIN -> java.util.List.of("TABLES", "MENU", "EMPLOYEES", "PROFILE", "TABLES_QR", "INVOICES", "DASHBOARD");
+            case MANAGER -> java.util.List.of("TABLES", "MENU");
+            case KITCHEN -> java.util.List.of("MENU");
+            case STAFF -> java.util.List.of("TABLES");
+            default -> java.util.List.of("TABLES");
+        };
 
         // Build UserInfo
         JwtAuthResponse.UserInfo userInfo = JwtAuthResponse.UserInfo.builder()
@@ -57,6 +67,7 @@ public class AuthServiceImpl implements AuthService {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .role(user.getRole().name())
+                .permissions(permissions)
                 .build();
 
         // Build and return response
