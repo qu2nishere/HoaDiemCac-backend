@@ -93,4 +93,82 @@ public class RestaurantTable extends BaseEntity {
      */
     @Column(name = "qr_code_url", length = 500)
     private String qrCodeUrl;
+
+    /**
+     * Mã PIN 4 chữ số ngẫu nhiên của bàn ăn (Passcode rotation) để khách nhập khi quét QR.
+     * Tự động sinh mới khi bàn được thanh toán/mở phiên hoặc reset thủ công.
+     */
+    @Column(name = "current_passcode", length = 10)
+    private String currentPasscode;
+
+    /**
+     * Thời điểm sinh mã PIN hiện tại của bàn.
+     */
+    @Column(name = "passcode_created_at")
+    private LocalDateTime passcodeCreatedAt;
+
+    /**
+     * Số lần nhập sai mã PIN liên tiếp của bàn (phục vụ chống Brute-force).
+     */
+    @Column(name = "failed_attempts", nullable = false)
+    @Builder.Default
+    private Integer failedAttempts = 0;
+
+    /**
+     * Thời điểm hết hạn khóa tạm thời khi nhập sai mã PIN quá 5 lần.
+     */
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
+    /**
+     * Số lượng thiết bị tối đa được phép kết nối đồng thời tại bàn (Anti-Spam / Abuse).
+     * Mặc định = capacity * 1.5 (VD bàn 4 người -> tối đa 6 thiết bị).
+     */
+    @Column(name = "max_active_devices", nullable = false)
+    @Builder.Default
+    private Integer maxActiveDevices = 6;
+
+    /**
+     * Số lượng thiết bị hiện đang kết nối hợp lệ vào phiên bàn ăn.
+     */
+    @Column(name = "active_device_count", nullable = false)
+    @Builder.Default
+    private Integer activeDeviceCount = 0;
+
+    /**
+     * Kiểm tra bàn có đang bị khóa tạm thời do nhập sai quá nhiều lần hay không.
+     */
+    public boolean isTemporarilyLocked() {
+        return lockedUntil != null && lockedUntil.isAfter(LocalDateTime.now());
+    }
+
+    /**
+     * Sinh mã PIN 4 số ngẫu nhiên mới và reset bộ đếm lỗi.
+     */
+    public String generateNewPasscode() {
+        int code = new java.security.SecureRandom().nextInt(10000);
+        this.currentPasscode = String.format("%04d", code);
+        this.passcodeCreatedAt = LocalDateTime.now();
+        this.failedAttempts = 0;
+        this.lockedUntil = null;
+        return this.currentPasscode;
+    }
+
+    /**
+     * Ghi nhận 1 lần nhập sai mã PIN. Nếu đạt 5 lần thì khóa trong 60 giây.
+     */
+    public void recordFailedAttempt() {
+        this.failedAttempts = (this.failedAttempts == null ? 0 : this.failedAttempts) + 1;
+        if (this.failedAttempts >= 5) {
+            this.lockedUntil = LocalDateTime.now().plusSeconds(60);
+        }
+    }
+
+    /**
+     * Reset số lần nhập sai sau khi nhập đúng.
+     */
+    public void resetFailedAttempts() {
+        this.failedAttempts = 0;
+        this.lockedUntil = null;
+    }
 }

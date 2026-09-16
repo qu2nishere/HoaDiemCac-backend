@@ -13,7 +13,9 @@ public enum ErrorCode {
     UNAUTHENTICATED(1003, "Unauthenticated", HttpStatus.UNAUTHORIZED),
     UNAUTHORIZED(1004, "You do not have permission", HttpStatus.FORBIDDEN),
     INVALID_REQUEST(1005, "Invalid request parameter", HttpStatus.BAD_REQUEST),
-    RESOURCE_ALREADY_EXISTS(1006, "Resource already exists", HttpStatus.CONFLICT);
+    RESOURCE_ALREADY_EXISTS(1006, "Resource already exists", HttpStatus.CONFLICT),
+    TABLE_LOCKED(1007, "Bàn đang bị khóa tạm thời hoặc bị khóa gọi món", HttpStatus.FORBIDDEN),
+    DEVICE_LIMIT_EXCEEDED(1008, "Bàn đã đạt giới hạn thiết bị truy cập đồng thời", HttpStatus.TOO_MANY_REQUESTS);
 
     private final int code;
     private final String message;
