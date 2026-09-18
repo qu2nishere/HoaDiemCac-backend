@@ -10,18 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 @Slf4j
@@ -57,56 +49,35 @@ public class UploadServiceImpl implements UploadService {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Định dạng tệp không được hỗ trợ. Chỉ chấp nhận jpg, jpeg, png, webp, gif");
         }
 
-        // Ưu tiên 1: Tải lên Cloudinary CDN nếu đã cấu hình
-        if (cloudinary != null) {
-            try {
-                Map uploadResult = cloudinary.uploader().upload(
-                        file.getBytes(),
-                        ObjectUtils.asMap(
-                                "folder", "hoadiemcac/dishes",
-                                "resource_type", "image"
-                        )
-                );
-                String secureUrl = (String) uploadResult.get("secure_url");
-                if (secureUrl != null && !secureUrl.isBlank()) {
-                    log.info("Tải ảnh lên Cloudinary CDN thành công: {}", secureUrl);
-                    return secureUrl;
-                }
-            } catch (Exception e) {
-                log.warn("Tải ảnh lên Cloudinary gặp lỗi: {}. Chuyển sang lưu trữ CDN nội bộ.", e.getMessage());
-            }
+        if (cloudinary == null) {
+            log.error("Cloudinary chưa được cấu hình thông tin kết nối (cloud_name, api_key, api_secret)");
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION,
+                    "Dịch vụ Cloudinary CDN chưa được cấu hình. Vui lòng cấu hình CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET để tải ảnh lên CDN.");
         }
 
-        // Ưu tiên 2 (Fallback): Lưu trữ tại máy chủ Backend
         try {
-            Path uploadDir = Paths.get("uploads/dishes");
-            if (!Files.exists(uploadDir)) {
-                Files.createDirectories(uploadDir);
+            // Tải ảnh trực tiếp lên Cloudinary CDN từ bộ nhớ RAM (không lưu bất kỳ tệp nào vào máy tính)
+            Map uploadResult = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", "hoadiemcac/dishes",
+                            "resource_type", "image"
+                    )
+            );
+
+            String secureUrl = (String) uploadResult.get("secure_url");
+            if (secureUrl != null && !secureUrl.isBlank()) {
+                log.info("Tải ảnh lên Cloudinary CDN thành công: {}", secureUrl);
+                return secureUrl;
             }
 
-            String uniqueFilename = "dish-" + UUID.randomUUID() + "." + extension;
-            Path destinationFile = uploadDir.resolve(uniqueFilename);
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không nhận được đường dẫn ảnh an toàn từ Cloudinary CDN");
 
-            try (InputStream inputStream = file.getInputStream()) {
-                Files.copy(inputStream, destinationFile, StandardCopyOption.REPLACE_EXISTING);
-            }
-
-            String fileUrl = "/uploads/dishes/" + uniqueFilename;
-            try {
-                fileUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
-                        .path("/uploads/dishes/")
-                        .path(uniqueFilename)
-                        .toUriString();
-            } catch (Exception e) {
-                log.debug("Không thể lấy context path hiện tại, sử dụng đường dẫn: {}", fileUrl);
-            }
-
-            log.info("Lưu trữ ảnh qua CDN Backend thành công: {}", fileUrl);
-            return fileUrl;
-
-        } catch (IOException e) {
-            log.error("Lỗi khi lưu trữ tệp ảnh", e);
-            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể lưu tệp ảnh lên máy chủ: " + e.getMessage());
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Lỗi khi tải ảnh lên Cloudinary CDN: {}", e.getMessage(), e);
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể tải ảnh lên Cloudinary CDN: " + e.getMessage());
         }
     }
 }
