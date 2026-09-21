@@ -20,5 +20,7 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, Long> {
 
     Optional<MenuItem> findByCode(String code);
 
+    Optional<MenuItem> findByName(String name);
+
     boolean existsByCode(String code);
 }
