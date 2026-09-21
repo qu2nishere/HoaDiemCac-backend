@@ -28,6 +28,7 @@ public class SecurityConfig {
             "/api/v1/auth/**",
             "/api/v1/public/**",
             "/api/v1/customer/**",
+            "/api/v1/kitchen/**",
             "/api/v1/menu/**",
             "/api/v1/menu-items/**",
             "/api/v1/admin/tables/**",
