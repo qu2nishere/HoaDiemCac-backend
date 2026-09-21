@@ -155,24 +155,33 @@ public class OrderServiceImpl implements OrderService {
         item.setStatus(status);
         if (status == OrderItemStatus.SERVED) {
             item.setServedAt(LocalDateTime.now());
+        } else if (status == OrderItemStatus.DELIVERED) {
+            item.setDeliveredAt(LocalDateTime.now());
+            if (item.getServedAt() == null) {
+                item.setServedAt(LocalDateTime.now());
+            }
         }
 
         OrderItem savedItem = orderItemRepository.save(item);
         Order order = item.getOrder();
 
-        boolean allServed = order.getOrderItems().stream()
-                .allMatch(i -> i.getStatus() == OrderItemStatus.SERVED || i.getStatus() == OrderItemStatus.CANCELLED);
-        if (allServed) {
+        boolean allDelivered = order.getOrderItems().stream()
+                .allMatch(i -> i.getStatus() == OrderItemStatus.DELIVERED || i.getStatus() == OrderItemStatus.CANCELLED);
+        if (allDelivered) {
             order.setStatus(OrderStatus.COMPLETED);
             orderRepository.save(order);
         }
 
         OrderItemResponse response = mapItemToResponse(savedItem);
 
-        // Broadcast qua WebSocket
+        // Broadcast qua WebSocket tới KDS, Waiter và Table
         try {
+            String eventType = (status == OrderItemStatus.DELIVERED)
+                    ? "WAITER_ITEM_DELIVERED"
+                    : "KITCHEN_ITEM_STATUS_TOGGLED";
+
             Map<String, Object> event = Map.of(
-                    "type", "KITCHEN_ITEM_STATUS_TOGGLED",
+                    "type", eventType,
                     "orderId", order.getId(),
                     "itemId", item.getId(),
                     "nextStatus", status.name(),
@@ -180,11 +189,63 @@ public class OrderServiceImpl implements OrderService {
                     "affectedTableCode", order.getRestaurantTable() != null ? order.getRestaurantTable().getName() : "BÀN"
             );
             messagingTemplate.convertAndSend("/topic/kitchen/orders", event);
+            messagingTemplate.convertAndSend("/topic/waiter/orders", event);
             if (order.getRestaurantTable() != null) {
                 messagingTemplate.convertAndSend("/topic/table/" + order.getRestaurantTable().getTableNumber() + "/status", event);
             }
         } catch (Exception e) {
             log.warn("Lỗi khi bắn WebSocket cập nhật trạng thái món: {}", e.getMessage());
+        }
+
+        return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getWaiterOrders() {
+        return orderRepository.findByStatusInOrderByCreatedAtAsc(List.of(OrderStatus.PENDING, OrderStatus.COOKING))
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public OrderItemResponse deliverOrderItem(Long orderItemId) {
+        return updateOrderItemStatus(orderItemId, OrderItemStatus.DELIVERED);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse deliverAllOrderItems(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
+
+        LocalDateTime now = LocalDateTime.now();
+        for (OrderItem item : order.getOrderItems()) {
+            if (item.getStatus() == OrderItemStatus.SERVED || item.getStatus() == OrderItemStatus.COOKING) {
+                item.setStatus(OrderItemStatus.DELIVERED);
+                if (item.getServedAt() == null) item.setServedAt(now);
+                item.setDeliveredAt(now);
+            }
+        }
+        order.setStatus(OrderStatus.COMPLETED);
+        Order saved = orderRepository.save(order);
+        OrderResponse response = mapToResponse(saved);
+
+        try {
+            Map<String, Object> event = Map.of(
+                    "type", "WAITER_ALL_ITEMS_DELIVERED",
+                    "orderId", order.getId(),
+                    "affectedTable", order.getRestaurantTable() != null ? order.getRestaurantTable().getName() : "BÀN"
+            );
+            messagingTemplate.convertAndSend("/topic/waiter/orders", event);
+            messagingTemplate.convertAndSend("/topic/kitchen/orders", event);
+            if (order.getRestaurantTable() != null) {
+                messagingTemplate.convertAndSend("/topic/table/" + order.getRestaurantTable().getTableNumber() + "/status", event);
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi khi bắn WebSocket deliverAllOrderItems: {}", e.getMessage());
         }
 
         return response;
@@ -198,10 +259,12 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus(status);
         if (status == OrderStatus.COMPLETED) {
+            LocalDateTime now = LocalDateTime.now();
             for (OrderItem item : order.getOrderItems()) {
-                if (item.getStatus() == OrderItemStatus.COOKING) {
-                    item.setStatus(OrderItemStatus.SERVED);
-                    item.setServedAt(LocalDateTime.now());
+                if (item.getStatus() == OrderItemStatus.COOKING || item.getStatus() == OrderItemStatus.SERVED) {
+                    item.setStatus(OrderItemStatus.DELIVERED);
+                    if (item.getServedAt() == null) item.setServedAt(now);
+                    item.setDeliveredAt(now);
                 }
             }
         }
@@ -211,6 +274,7 @@ public class OrderServiceImpl implements OrderService {
 
         try {
             messagingTemplate.convertAndSend("/topic/kitchen/orders", response);
+            messagingTemplate.convertAndSend("/topic/waiter/orders", response);
         } catch (Exception e) {
             log.warn("Lỗi khi bắn WebSocket order status: {}", e.getMessage());
         }
@@ -242,12 +306,14 @@ public class OrderServiceImpl implements OrderService {
                 .id(item.getId())
                 .menuItemId(item.getMenuItem() != null ? item.getMenuItem().getId() : null)
                 .name(item.getMenuItem() != null ? item.getMenuItem().getName() : "")
+                .imageUrl(item.getMenuItem() != null ? item.getMenuItem().getImageUrl() : "")
                 .price(item.getPrice())
                 .quantity(item.getQuantity())
                 .totalPrice(item.getTotalPrice())
                 .note(item.getNote())
                 .status(item.getStatus())
                 .servedAt(item.getServedAt())
+                .deliveredAt(item.getDeliveredAt())
                 .build();
     }
 }

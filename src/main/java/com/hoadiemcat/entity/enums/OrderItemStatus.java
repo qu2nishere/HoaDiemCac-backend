@@ -11,9 +11,14 @@ public enum OrderItemStatus {
     COOKING,
 
     /**
-     * Đã phục vụ / Đã xong - Món đã được đầu bếp hoàn tất và phục vụ ra bàn khách (UC18).
+     * Chờ phục vụ - Món đã được đầu bếp chế biến xong, sẵn sàng tại quầy để nhân viên phục vụ bưng lên bàn (UC18).
      */
     SERVED,
+
+    /**
+     * Đã phục vụ - Món đã được nhân viên phục vụ bưng lên bàn cho khách.
+     */
+    DELIVERED,
 
     /**
      * Đã hủy - Món bị hủy bởi Quản lý do hết nguyên liệu hoặc khách đổi ý (UC13).

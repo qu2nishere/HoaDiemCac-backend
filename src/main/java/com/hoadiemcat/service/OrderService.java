@@ -19,4 +19,10 @@ public interface OrderService {
     OrderItemResponse updateOrderItemStatus(Long orderItemId, OrderItemStatus status);
 
     OrderResponse updateOrderStatus(Long orderId, OrderStatus status);
+
+    List<OrderResponse> getWaiterOrders();
+
+    OrderItemResponse deliverOrderItem(Long orderItemId);
+
+    OrderResponse deliverAllOrderItems(Long orderId);
 }
