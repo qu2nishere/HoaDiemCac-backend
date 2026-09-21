@@ -20,6 +20,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o WHERE o.status IN (:statuses) ORDER BY o.createdAt ASC")
     List<Order> findByStatusInOrderByCreatedAtAsc(@Param("statuses") List<OrderStatus> statuses);
 
-    @Query("SELECT o FROM Order o WHERE o.restaurantTable.tableNumber = :tableNumber ORDER BY o.createdAt ASC")
+    @Query("SELECT o FROM Order o WHERE (o.restaurantTable.tableNumber = :tableNumber OR o.restaurantTable.name = :tableNumber) ORDER BY o.createdAt ASC")
     List<Order> findByTableNumberOrderByCreatedAtAsc(@Param("tableNumber") String tableNumber);
 }

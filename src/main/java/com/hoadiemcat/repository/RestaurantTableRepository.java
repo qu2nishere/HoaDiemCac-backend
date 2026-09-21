@@ -14,6 +14,8 @@ public interface RestaurantTableRepository extends JpaRepository<RestaurantTable
 
     Optional<RestaurantTable> findByTableNumber(String tableNumber);
 
+    Optional<RestaurantTable> findByName(String name);
+
     Optional<RestaurantTable> findByCurrentSessionToken(String currentSessionToken);
 
     List<RestaurantTable> findByArea(TableArea area);

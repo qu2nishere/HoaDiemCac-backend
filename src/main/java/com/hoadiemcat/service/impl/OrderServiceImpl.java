@@ -40,23 +40,48 @@ public class OrderServiceImpl implements OrderService {
     private final MenuItemRepository menuItemRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
+    private String normalizeTableNumber(String rawTable) {
+        if (rawTable == null || rawTable.isBlank()) return "B01";
+        String normalizedTable = rawTable.trim().toUpperCase();
+        if (normalizedTable.startsWith("VIP")) {
+            String digits = normalizedTable.replaceAll("[^0-9]", "");
+            return digits.isEmpty() ? normalizedTable : "VIP" + digits;
+        }
+        if (normalizedTable.startsWith("BÀN ") || normalizedTable.startsWith("BAN ")) {
+            String digits = normalizedTable.replaceAll("[^0-9]", "");
+            if (!digits.isEmpty()) {
+                try {
+                    return "B" + String.format("%02d", Integer.parseInt(digits));
+                } catch (Exception ignored) {}
+            }
+            return "B" + digits;
+        }
+        if (normalizedTable.startsWith("B")) {
+            String digits = normalizedTable.substring(1).trim();
+            if (digits.matches("^\\d+$")) {
+                try {
+                    return "B" + String.format("%02d", Integer.parseInt(digits));
+                } catch (Exception ignored) {}
+            }
+            return normalizedTable;
+        }
+        if (normalizedTable.matches("^\\d+$")) {
+            try {
+                return "B" + String.format("%02d", Integer.parseInt(normalizedTable));
+            } catch (Exception ignored) {}
+        }
+        return normalizedTable;
+    }
+
     @Override
     @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
         String rawTable = request.getTableNumber();
-        String normalizedTable = rawTable.trim().toUpperCase();
-        if (normalizedTable.startsWith("BÀN ") || normalizedTable.startsWith("BAN ")) {
-            normalizedTable = "B" + normalizedTable.replaceAll("[^0-9]", "");
-        } else if (!normalizedTable.startsWith("B") && !normalizedTable.startsWith("VIP")) {
-            try {
-                normalizedTable = "B" + String.format("%02d", Integer.parseInt(normalizedTable));
-            } catch (Exception e) {
-                // Giữ nguyên nếu không parse được
-            }
-        }
+        String searchTableNumber = normalizeTableNumber(rawTable);
 
-        final String searchTableNumber = normalizedTable;
         RestaurantTable table = restaurantTableRepository.findByTableNumber(searchTableNumber)
+                .or(() -> restaurantTableRepository.findByName(searchTableNumber))
+                .or(() -> restaurantTableRepository.findByName(rawTable.trim()))
                 .orElseGet(() -> {
                     return restaurantTableRepository.findAll().stream().findFirst()
                             .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "tableNumber", searchTableNumber));
@@ -117,10 +142,15 @@ public class OrderServiceImpl implements OrderService {
         Order saved = orderRepository.save(order);
         OrderResponse response = mapToResponse(saved);
 
-        // Bắn WebSocket thông báo tới Bếp KDS và Màn hình Bàn
+        // Bắn WebSocket thông báo tới Bếp KDS và Màn hình Bàn (hỗ trợ cả tableNumber và name)
         try {
             messagingTemplate.convertAndSend("/topic/kitchen/orders", response);
-            messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/status", response);
+            if (table.getTableNumber() != null) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/status", response);
+            }
+            if (table.getName() != null && !table.getName().equals(table.getTableNumber())) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getName() + "/status", response);
+            }
         } catch (Exception e) {
             log.warn("Lỗi khi bắn WebSocket order: {}", e.getMessage());
         }
@@ -131,7 +161,8 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public List<OrderResponse> getTableOrders(String tableNumber) {
-        return orderRepository.findByTableNumberOrderByCreatedAtAsc(tableNumber)
+        String normalized = normalizeTableNumber(tableNumber);
+        return orderRepository.findByTableNumberOrderByCreatedAtAsc(normalized)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -191,7 +222,14 @@ public class OrderServiceImpl implements OrderService {
             messagingTemplate.convertAndSend("/topic/kitchen/orders", event);
             messagingTemplate.convertAndSend("/topic/waiter/orders", event);
             if (order.getRestaurantTable() != null) {
-                messagingTemplate.convertAndSend("/topic/table/" + order.getRestaurantTable().getTableNumber() + "/status", event);
+                String tNum = order.getRestaurantTable().getTableNumber();
+                String tName = order.getRestaurantTable().getName();
+                if (tNum != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + tNum + "/status", event);
+                }
+                if (tName != null && !tName.equals(tNum)) {
+                    messagingTemplate.convertAndSend("/topic/table/" + tName + "/status", event);
+                }
             }
         } catch (Exception e) {
             log.warn("Lỗi khi bắn WebSocket cập nhật trạng thái món: {}", e.getMessage());
@@ -242,7 +280,14 @@ public class OrderServiceImpl implements OrderService {
             messagingTemplate.convertAndSend("/topic/waiter/orders", event);
             messagingTemplate.convertAndSend("/topic/kitchen/orders", event);
             if (order.getRestaurantTable() != null) {
-                messagingTemplate.convertAndSend("/topic/table/" + order.getRestaurantTable().getTableNumber() + "/status", event);
+                String tNum = order.getRestaurantTable().getTableNumber();
+                String tName = order.getRestaurantTable().getName();
+                if (tNum != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + tNum + "/status", event);
+                }
+                if (tName != null && !tName.equals(tNum)) {
+                    messagingTemplate.convertAndSend("/topic/table/" + tName + "/status", event);
+                }
             }
         } catch (Exception e) {
             log.warn("Lỗi khi bắn WebSocket deliverAllOrderItems: {}", e.getMessage());
