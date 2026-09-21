@@ -16,10 +16,12 @@ public class OrderItemResponse {
     private Long id;
     private Long menuItemId;
     private String name;
+    private String imageUrl;
     private BigDecimal price;
     private Integer quantity;
     private BigDecimal totalPrice;
     private String note;
     private OrderItemStatus status;
     private LocalDateTime servedAt;
+    private LocalDateTime deliveredAt;
 }

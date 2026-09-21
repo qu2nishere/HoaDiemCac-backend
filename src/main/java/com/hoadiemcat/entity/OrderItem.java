@@ -86,6 +86,12 @@ public class OrderItem extends BaseEntity {
     private LocalDateTime servedAt;
 
     /**
+     * Thời điểm nhân viên phục vụ bưng món lên bàn cho thực khách.
+     */
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
+    /**
      * Thời điểm món ăn bị hủy bởi Quản lý (nếu có sự cố xảy ra) (UC13).
      */
     @Column(name = "cancelled_at")
