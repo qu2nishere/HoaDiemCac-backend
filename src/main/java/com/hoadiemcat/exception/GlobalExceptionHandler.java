@@ -67,12 +67,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(apiResponse);
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMaxUploadSizeExceededException(
+            org.springframework.web.multipart.MaxUploadSizeExceededException exception) {
+        log.warn("Kích thước tệp tải lên vượt quá giới hạn: {}", exception.getMessage());
+        ApiResponse<Object> apiResponse = ApiResponse.builder()
+                .code(ErrorCode.INVALID_REQUEST.getCode())
+                .message("Dung lượng tệp vượt quá giới hạn tối đa cho phép của máy chủ (tối đa 10MB)")
+                .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(apiResponse);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleGeneralException(Exception exception) {
         log.error("Unhandled exception occurred: ", exception);
+        String message = (exception.getMessage() != null && !exception.getMessage().isBlank())
+                ? exception.getMessage()
+                : ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage();
         ApiResponse<Object> apiResponse = ApiResponse.builder()
                 .code(ErrorCode.UNCATEGORIZED_EXCEPTION.getCode())
-                .message(ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage())
+                .message(message)
                 .build();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(apiResponse);
     }
