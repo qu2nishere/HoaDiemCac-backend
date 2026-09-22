@@ -43,4 +43,10 @@ public interface TableQrService {
     void adminResetHost(Long tableId);
 
     void adminKickDevice(Long tableId, String targetDeviceToken);
+
+    void callStaff(String tableIdentifier, com.hoadiemcat.entity.enums.CallStaffType type, String message);
+
+    void resolveCallStaff(Long tableId);
+
+    void resolveCallStaff(Long tableId, com.hoadiemcat.entity.enums.CallStaffType type);
 }

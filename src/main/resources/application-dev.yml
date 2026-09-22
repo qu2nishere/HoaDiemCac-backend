@@ -5,14 +5,14 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${HIBERNATE_DDL_AUTO:none}
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
 
 logging:
   level:
     root: INFO
     com.hoadiemcat: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.SQL: INFO
+    org.hibernate.type.descriptor.sql.BasicBinder: INFO

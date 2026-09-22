@@ -78,6 +78,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(apiResponse);
     }
 
+    @ExceptionHandler({
+            org.springframework.web.context.request.async.AsyncRequestNotUsableException.class,
+            org.apache.catalina.connector.ClientAbortException.class
+    })
+    public void handleClientAbortException(Exception exception) {
+        log.debug("Client đóng kết nối sớm (reload/đóng tab): {}", exception.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleGeneralException(Exception exception) {
         log.error("Unhandled exception occurred: ", exception);

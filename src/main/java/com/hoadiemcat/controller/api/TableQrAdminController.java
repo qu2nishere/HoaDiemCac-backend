@@ -105,4 +105,14 @@ public class TableQrAdminController {
         tableQrService.adminKickDevice(id, request.getTargetDeviceToken());
         return ResponseEntity.ok(ApiResponse.success("Đã vô hiệu hóa thiết bị thành công", null));
     }
+
+    @PostMapping("/{id}/resolve-call-staff")
+    @Operation(summary = "Tắt / xử lý chuông gọi phục vụ hoặc yêu cầu thanh toán của bàn (Admin)")
+    public ResponseEntity<ApiResponse<Void>> resolveCallStaff(
+            @PathVariable Long id,
+            @RequestParam(required = false) com.hoadiemcat.entity.enums.CallStaffType type
+    ) {
+        tableQrService.resolveCallStaff(id, type);
+        return ResponseEntity.ok(ApiResponse.success("Đã xử lý thông báo của bàn", null));
+    }
 }

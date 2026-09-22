@@ -18,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -33,15 +35,38 @@ public class TableQrServiceImpl implements TableQrService {
 
     private final RestaurantTableRepository tableRepository;
     private final TableSessionDeviceRepository tableSessionDeviceRepository;
+    private final com.hoadiemcat.repository.OrderRepository orderRepository;
+    private final com.hoadiemcat.repository.CallStaffLogRepository callStaffLogRepository;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<TableQrResponse> getAllTables() {
         List<RestaurantTable> tables = tableRepository.findAllByOrderByTableNumberAsc();
         if (tables.isEmpty()) {
             tables = seedDefaultTables();
         }
-        return tables.stream().map(this::mapToResponse).collect(Collectors.toList());
+
+        // Tối ưu hóa N+1 Query: Gom 41 query thành đúng 2 query batch duy nhất
+        List<com.hoadiemcat.entity.Order> allOrders = orderRepository.findActiveOrdersByTablesWithItems(tables);
+        Map<Long, List<com.hoadiemcat.entity.Order>> ordersByTableId = allOrders.stream()
+                .filter(o -> o.getRestaurantTable() != null && o.getRestaurantTable().getId() != null)
+                .collect(Collectors.groupingBy(o -> o.getRestaurantTable().getId()));
+
+        List<com.hoadiemcat.entity.CallStaffLog> allPendingLogs = callStaffLogRepository.findByRestaurantTableInAndStatus(
+                tables, com.hoadiemcat.entity.enums.CallStaffStatus.PENDING
+        );
+        Map<Long, List<com.hoadiemcat.entity.CallStaffLog>> logsByTableId = allPendingLogs.stream()
+                .filter(l -> l.getRestaurantTable() != null && l.getRestaurantTable().getId() != null)
+                .collect(Collectors.groupingBy(l -> l.getRestaurantTable().getId()));
+
+        return tables.stream()
+                .map(table -> mapToResponseWithData(
+                        table,
+                        ordersByTableId.getOrDefault(table.getId(), Collections.emptyList()),
+                        logsByTableId.getOrDefault(table.getId(), Collections.emptyList())
+                ))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -99,7 +124,9 @@ public class TableQrServiceImpl implements TableQrService {
         if (request.getMaxActiveDevices() != null) {
             table.setMaxActiveDevices(request.getMaxActiveDevices());
         }
-        return mapToResponse(tableRepository.save(table));
+        RestaurantTable saved = tableRepository.save(table);
+        broadcastTableUpdate(saved);
+        return mapToResponse(saved);
     }
 
     @Override
@@ -107,7 +134,9 @@ public class TableQrServiceImpl implements TableQrService {
     public TableQrResponse regeneratePasscode(Long id) {
         RestaurantTable table = findTableEntity(id);
         resetTableToAvailableSession(table);
-        return mapToResponse(tableRepository.save(table));
+        RestaurantTable saved = tableRepository.save(table);
+        broadcastTableUpdate(saved);
+        return mapToResponse(saved);
     }
 
     @Override
@@ -115,7 +144,9 @@ public class TableQrServiceImpl implements TableQrService {
     public TableQrResponse toggleOrderLock(Long id) {
         RestaurantTable table = findTableEntity(id);
         table.setIsOrderLocked(!Boolean.TRUE.equals(table.getIsOrderLocked()));
-        return mapToResponse(tableRepository.save(table));
+        RestaurantTable saved = tableRepository.save(table);
+        broadcastTableUpdate(saved);
+        return mapToResponse(saved);
     }
 
     @Override
@@ -127,7 +158,19 @@ public class TableQrServiceImpl implements TableQrService {
         } else {
             table.setStatus(status);
         }
-        return mapToResponse(tableRepository.save(table));
+        RestaurantTable saved = tableRepository.save(table);
+        broadcastTableUpdate(saved);
+        return mapToResponse(saved);
+    }
+
+    private void broadcastTableUpdate(RestaurantTable table) {
+        if (messagingTemplate != null && table != null) {
+            try {
+                messagingTemplate.convertAndSend("/topic/tables", mapToResponse(table));
+            } catch (Exception e) {
+                log.warn("Không thể gửi thông báo WebSocket cập nhật bàn qua /topic/tables: {}", e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -363,6 +406,7 @@ public class TableQrServiceImpl implements TableQrService {
             if (Boolean.TRUE.equals(target.getIsHost())) {
                 adminResetHost(tableId);
             }
+            broadcastTableUpdate(table);
         }
     }
 
@@ -395,8 +439,91 @@ public class TableQrServiceImpl implements TableQrService {
         throw new AppException(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
+    @Override
+    @Transactional
+    public void callStaff(String tableIdentifier, com.hoadiemcat.entity.enums.CallStaffType type, String message) {
+        RestaurantTable table = findByIdentifier(tableIdentifier);
+        com.hoadiemcat.entity.CallStaffLog logEntity = com.hoadiemcat.entity.CallStaffLog.builder()
+                .restaurantTable(table)
+                .requestType(type != null ? type : com.hoadiemcat.entity.enums.CallStaffType.CALL_STAFF)
+                .message(message)
+                .status(com.hoadiemcat.entity.enums.CallStaffStatus.PENDING)
+                .build();
+        callStaffLogRepository.save(logEntity);
+        broadcastTableUpdate(table);
+    }
+
+    @Override
+    @Transactional
+    public void resolveCallStaff(Long tableId) {
+        resolveCallStaff(tableId, null);
+    }
+
+    @Override
+    @Transactional
+    public void resolveCallStaff(Long tableId, com.hoadiemcat.entity.enums.CallStaffType type) {
+        RestaurantTable table = findTableEntity(tableId);
+        List<com.hoadiemcat.entity.CallStaffLog> pendingLogs = callStaffLogRepository.findByRestaurantTableAndStatus(
+                table, com.hoadiemcat.entity.enums.CallStaffStatus.PENDING
+        );
+        List<com.hoadiemcat.entity.CallStaffLog> targetLogs = (type != null)
+                ? pendingLogs.stream().filter(l -> l.getRequestType() == type).collect(Collectors.toList())
+                : pendingLogs;
+
+        for (com.hoadiemcat.entity.CallStaffLog l : targetLogs) {
+            l.setStatus(com.hoadiemcat.entity.enums.CallStaffStatus.RESOLVED);
+            l.setResolvedAt(LocalDateTime.now());
+        }
+        callStaffLogRepository.saveAll(targetLogs);
+        broadcastTableUpdate(table);
+    }
+
     private TableQrResponse mapToResponse(RestaurantTable table) {
+        List<com.hoadiemcat.entity.Order> orders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(table);
+        List<com.hoadiemcat.entity.CallStaffLog> pendingLogs = callStaffLogRepository.findByRestaurantTableAndStatus(
+                table, com.hoadiemcat.entity.enums.CallStaffStatus.PENDING
+        );
+        return mapToResponseWithData(table, orders, pendingLogs);
+    }
+
+    private TableQrResponse mapToResponseWithData(
+            RestaurantTable table,
+            List<com.hoadiemcat.entity.Order> orders,
+            List<com.hoadiemcat.entity.CallStaffLog> pendingLogs
+    ) {
         String baseUrl = "https://hoadiemcat.vn/table/" + table.getTableNumber();
+
+        java.math.BigDecimal totalAmount = java.math.BigDecimal.ZERO;
+        int activeOrderCount = 0;
+        int activeItemCount = 0;
+        boolean hasCallStaff = false;
+        boolean isPaying = false;
+
+        try {
+            List<com.hoadiemcat.entity.Order> activeOrders = (orders != null ? orders : Collections.<com.hoadiemcat.entity.Order>emptyList()).stream()
+                    .filter(o -> o.getStatus() != com.hoadiemcat.entity.enums.OrderStatus.CANCELLED)
+                    .collect(Collectors.toList());
+
+            activeOrderCount = activeOrders.size();
+            totalAmount = activeOrders.stream()
+                    .flatMap(o -> o.getOrderItems() != null ? o.getOrderItems().stream() : java.util.stream.Stream.empty())
+                    .map(item -> item.getPrice() != null && item.getQuantity() != null
+                            ? item.getPrice().multiply(java.math.BigDecimal.valueOf(item.getQuantity()))
+                            : java.math.BigDecimal.ZERO)
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+
+            activeItemCount = activeOrders.stream()
+                    .mapToInt(o -> o.getOrderItems() != null ? o.getOrderItems().size() : 0)
+                    .sum();
+
+            if (pendingLogs != null) {
+                hasCallStaff = pendingLogs.stream().anyMatch(l -> l.getRequestType() == com.hoadiemcat.entity.enums.CallStaffType.CALL_STAFF);
+                isPaying = pendingLogs.stream().anyMatch(l -> l.getRequestType() == com.hoadiemcat.entity.enums.CallStaffType.PAYMENT_REQUEST);
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi tính toán dữ liệu đơn hàng bàn {}: {}", table.getTableNumber(), e.getMessage());
+        }
+
         return TableQrResponse.builder()
                 .id(table.getId())
                 .tableNumber(table.getTableNumber())
@@ -414,6 +541,11 @@ public class TableQrServiceImpl implements TableQrService {
                 .isTemporarilyLocked(table.isTemporarilyLocked())
                 .failedAttempts(table.getFailedAttempts() != null ? table.getFailedAttempts() : 0)
                 .sessionStartedAt(table.getSessionStartedAt())
+                .totalAmount(totalAmount)
+                .activeOrderCount(activeOrderCount)
+                .activeItemCount(activeItemCount)
+                .hasCallStaff(hasCallStaff)
+                .isPaying(isPaying)
                 .build();
     }
 

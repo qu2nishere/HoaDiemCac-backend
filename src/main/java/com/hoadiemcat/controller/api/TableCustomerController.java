@@ -82,4 +82,15 @@ public class TableCustomerController {
         tableQrService.transferHost(identifier, hostToken, request.getNewHostDeviceToken());
         return ResponseEntity.ok(ApiResponse.success("Đã chuyển quyền Chủ Bàn thành công.", null));
     }
+
+    @PostMapping("/{identifier}/call-staff")
+    @Operation(summary = "Khách hàng gửi yêu cầu chuông gọi nhân viên / yêu cầu thanh toán")
+    public ResponseEntity<ApiResponse<Void>> callStaff(
+            @PathVariable String identifier,
+            @RequestParam(defaultValue = "CALL_STAFF") com.hoadiemcat.entity.enums.CallStaffType type,
+            @RequestParam(required = false) String message
+    ) {
+        tableQrService.callStaff(identifier, type, message);
+        return ResponseEntity.ok(ApiResponse.success("Đã gửi tín hiệu chuông gọi nhân viên thành công.", null));
+    }
 }

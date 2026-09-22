@@ -31,4 +31,9 @@ public class TableQrResponse {
     private Boolean isTemporarilyLocked;
     private Integer failedAttempts;
     private LocalDateTime sessionStartedAt;
+    private java.math.BigDecimal totalAmount;
+    private Integer activeOrderCount;
+    private Integer activeItemCount;
+    private Boolean hasCallStaff;
+    private Boolean isPaying;
 }

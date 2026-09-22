@@ -40,6 +40,9 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final RestaurantTableRepository tableRepository;
     private final UserRepository userRepository;
     private final TableQrService tableQrService;
+    private final com.hoadiemcat.repository.OrderRepository orderRepository;
+    private final com.hoadiemcat.repository.CallStaffLogRepository callStaffLogRepository;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     @Override
     @Transactional
@@ -98,9 +101,21 @@ public class InvoiceServiceImpl implements InvoiceService {
             cashier = userRepository.findByUsername(cashierUsername).orElse(null);
         }
 
-        BigDecimal subtotal = new BigDecimal("1250000.00");
+        List<com.hoadiemcat.entity.Order> orders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(table);
+        BigDecimal subtotal = orders.stream()
+                .filter(o -> o.getStatus() != com.hoadiemcat.entity.enums.OrderStatus.CANCELLED)
+                .flatMap(o -> o.getOrderItems() != null ? o.getOrderItems().stream() : java.util.stream.Stream.empty())
+                .map(item -> item.getPrice() != null && item.getQuantity() != null
+                        ? item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()))
+                        : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (subtotal.compareTo(BigDecimal.ZERO) == 0) {
+            subtotal = new BigDecimal("0.00");
+        }
+
         BigDecimal vatPercent = new BigDecimal("8.00");
-        BigDecimal vatAmount = subtotal.multiply(vatPercent).divide(new BigDecimal("100"));
+        BigDecimal vatAmount = subtotal.multiply(vatPercent).divide(new BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
         BigDecimal finalAmount = subtotal.add(vatAmount);
 
         BigDecimal cashChange = BigDecimal.ZERO;
@@ -132,10 +147,36 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         Invoice saved = invoiceRepository.save(invoice);
 
+        // Cập nhật trạng thái các đơn hàng sang COMPLETED
+        for (com.hoadiemcat.entity.Order o : orders) {
+            if (o.getStatus() != com.hoadiemcat.entity.enums.OrderStatus.CANCELLED) {
+                o.setStatus(com.hoadiemcat.entity.enums.OrderStatus.COMPLETED);
+            }
+        }
+        orderRepository.saveAll(orders);
+
+        // Giải quyết chuông gọi nhân viên đang chờ (nếu có)
+        List<com.hoadiemcat.entity.CallStaffLog> pendingLogs = callStaffLogRepository.findByRestaurantTableAndStatus(
+                table, com.hoadiemcat.entity.enums.CallStaffStatus.PENDING
+        );
+        for (com.hoadiemcat.entity.CallStaffLog l : pendingLogs) {
+            l.setStatus(com.hoadiemcat.entity.enums.CallStaffStatus.RESOLVED);
+            l.setResolvedAt(LocalDateTime.now());
+        }
+        callStaffLogRepository.saveAll(pendingLogs);
+
         // Kích hoạt giải phóng phiên bàn ăn: Xoay mã PIN 4 số mới và thu hồi Session Token cũ
         tableQrService.releaseTableSession(tableId);
         table.setStatus(TableStatus.CLEANING);
-        tableRepository.save(table);
+        RestaurantTable savedTable = tableRepository.save(table);
+
+        try {
+            if (messagingTemplate != null) {
+                messagingTemplate.convertAndSend("/topic/tables", tableQrService.getTableById(tableId));
+            }
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo WebSocket cập nhật bàn qua /topic/tables sau thanh toán: {}", e.getMessage());
+        }
 
         return mapToResponse(saved);
     }

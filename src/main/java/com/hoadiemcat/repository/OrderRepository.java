@@ -15,6 +15,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findByRestaurantTableOrderByCreatedAtAsc(RestaurantTable restaurantTable);
 
+    List<Order> findByRestaurantTableInOrderByCreatedAtAsc(List<RestaurantTable> restaurantTables);
+
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.orderItems WHERE o.restaurantTable IN (:tables) AND o.status != com.hoadiemcat.entity.enums.OrderStatus.CANCELLED ORDER BY o.createdAt ASC")
+    List<Order> findActiveOrdersByTablesWithItems(@Param("tables") List<RestaurantTable> tables);
+
     List<Order> findBySessionTokenOrderByCreatedAtAsc(String sessionToken);
 
     @Query("SELECT o FROM Order o WHERE o.status IN (:statuses) ORDER BY o.createdAt ASC")
