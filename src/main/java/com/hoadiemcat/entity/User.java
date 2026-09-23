@@ -84,4 +84,10 @@ public class User extends BaseEntity {
      */
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
+
+    /**
+     * Danh sách mã quyền phân quyền chức năng (phân tách bằng dấu phẩy, VD: "TABLES,KITCHEN,WAITER,MENU").
+     */
+    @Column(name = "permissions", length = 500)
+    private String permissions;
 }

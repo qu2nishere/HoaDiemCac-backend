@@ -5,4 +5,6 @@ import com.hoadiemcat.dto.response.JwtAuthResponse;
 
 public interface AuthService {
     JwtAuthResponse login(LoginRequest loginRequest);
+    void logout();
+    JwtAuthResponse.UserInfo getCurrentUser();
 }

@@ -28,5 +28,6 @@ public class JwtAuthResponse {
         private String role;
         private String avatarUrl;
         private java.util.List<String> permissions;
+        private String status;
     }
 }

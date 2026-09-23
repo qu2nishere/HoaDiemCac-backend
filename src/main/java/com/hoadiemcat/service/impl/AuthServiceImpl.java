@@ -52,23 +52,7 @@ public class AuthServiceImpl implements AuthService {
         extraClaims.put("role", user.getRole().name());
         String token = jwtTokenProvider.generateToken(user.getUsername(), extraClaims);
 
-        java.util.List<String> permissions = switch (user.getRole()) {
-            case ADMIN -> java.util.List.of("TABLES", "MENU", "EMPLOYEES", "PROFILE", "TABLES_QR", "INVOICES", "DASHBOARD");
-            case MANAGER -> java.util.List.of("TABLES", "MENU");
-            case KITCHEN -> java.util.List.of("MENU");
-            case STAFF -> java.util.List.of("TABLES");
-            default -> java.util.List.of("TABLES");
-        };
-
-        // Build UserInfo
-        JwtAuthResponse.UserInfo userInfo = JwtAuthResponse.UserInfo.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .role(user.getRole().name())
-                .permissions(permissions)
-                .build();
+        JwtAuthResponse.UserInfo userInfo = buildUserInfo(user);
 
         // Build and return response
         return JwtAuthResponse.builder()
@@ -76,5 +60,53 @@ public class AuthServiceImpl implements AuthService {
                 .tokenType("Bearer")
                 .user(userInfo)
                 .build();
+    }
+
+    @Override
+    public JwtAuthResponse.UserInfo getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new com.hoadiemcat.exception.AppException(com.hoadiemcat.exception.ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+
+        String username = authentication.getName();
+        User user = userRepository.findByUsername(username)
+                .orElseGet(() -> userRepository.findByEmail(username)
+                        .orElseThrow(() -> new com.hoadiemcat.exception.AppException(com.hoadiemcat.exception.ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy thông tin tài khoản")));
+
+        return buildUserInfo(user);
+    }
+
+    private JwtAuthResponse.UserInfo buildUserInfo(User user) {
+        java.util.List<String> permissions;
+        if (user.getPermissions() != null && !user.getPermissions().isBlank()) {
+            permissions = java.util.Arrays.stream(user.getPermissions().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        } else {
+            permissions = switch (user.getRole()) {
+                case ADMIN -> java.util.List.of("TABLES", "KITCHEN", "WAITER", "MENU", "EMPLOYEES", "PROFILE", "TABLES_QR", "INVOICES", "DASHBOARD");
+                case MANAGER -> java.util.List.of("DASHBOARD", "INVOICES", "MENU", "KITCHEN", "WAITER", "TABLES_QR");
+                case KITCHEN -> java.util.List.of("KITCHEN");
+                case STAFF -> java.util.List.of("WAITER");
+                default -> java.util.List.of("WAITER");
+            };
+        }
+
+        return JwtAuthResponse.UserInfo.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .role(user.getRole().name())
+                .status(user.getStatus() != null ? user.getStatus().name() : "ACTIVE")
+                .permissions(permissions)
+                .build();
+    }
+
+    @Override
+    public void logout() {
+        SecurityContextHolder.clearContext();
     }
 }

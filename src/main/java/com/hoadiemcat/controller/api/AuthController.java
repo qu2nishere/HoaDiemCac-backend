@@ -24,4 +24,16 @@ public class AuthController {
         JwtAuthResponse authResponse = authService.login(loginRequest);
         return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công", authResponse));
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout() {
+        authService.logout();
+        return ResponseEntity.ok(ApiResponse.success("Đăng xuất thành công", null));
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/me")
+    public ResponseEntity<ApiResponse<JwtAuthResponse.UserInfo>> getCurrentUser() {
+        JwtAuthResponse.UserInfo userInfo = authService.getCurrentUser();
+        return ResponseEntity.ok(ApiResponse.success("Lấy thông tin tài khoản thành công", userInfo));
+    }
 }
