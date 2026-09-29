@@ -42,6 +42,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     @Query("SELECT COALESCE(SUM(i.finalAmount), 0) FROM Invoice i WHERE i.paymentStatus = 'PAID' AND i.paidAt BETWEEN :start AND :end")
     BigDecimal sumRevenueBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
+    @Query("SELECT COALESCE(SUM(i.taxAmount), 0) FROM Invoice i WHERE i.paymentStatus = 'PAID' AND i.paidAt BETWEEN :start AND :end")
+    BigDecimal sumTaxBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
     @Query("SELECT COUNT(i) FROM Invoice i WHERE i.paymentStatus = 'PAID' AND i.paidAt BETWEEN :start AND :end")
     Long countPaidInvoicesBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 

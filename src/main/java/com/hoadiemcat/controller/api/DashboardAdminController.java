@@ -9,6 +9,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.LocalDate;
+
 @RestController
 @RequestMapping("/api/v1/admin/dashboard")
 @RequiredArgsConstructor
@@ -18,11 +21,13 @@ public class DashboardAdminController {
     private final DashboardService dashboardService;
 
     @GetMapping("/summary")
-    @Operation(summary = "Lấy báo cáo tổng hợp doanh thu, KPI và biểu đồ theo kỳ (today, week, month)")
+    @Operation(summary = "Lấy báo cáo tổng hợp doanh thu, KPI, biểu đồ, top món ăn và lịch sử hóa đơn theo kỳ (today/day, week, month, year, custom)")
     public ResponseEntity<ApiResponse<DashboardSummaryResponse>> getSummary(
-            @RequestParam(defaultValue = "today") String period
+            @RequestParam(defaultValue = "today") String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
-        DashboardSummaryResponse summary = dashboardService.getDashboardSummary(period);
+        DashboardSummaryResponse summary = dashboardService.getDashboardSummary(period, startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success(summary));
     }
 }
