@@ -21,4 +21,9 @@ public class TableTransferConfirmRequest {
     private String deviceFingerprint;
 
     private String deviceName;
+
+    /**
+     * Mã PIN 4 số của bàn đích (Bắt buộc khi GHÉP BÀN để chống đổ nợ hóa đơn sang người lạ).
+     */
+    private String targetPasscode;
 }

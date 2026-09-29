@@ -176,10 +176,11 @@ public class TableQrServiceImpl implements TableQrService {
     @Override
     @Transactional
     public VerifyPasscodeResponse verifyPasscode(String tableIdentifier, VerifyPasscodeRequest request) {
-        RestaurantTable table = findByIdentifier(tableIdentifier);
+        RestaurantTable rawTable = findByIdentifier(tableIdentifier);
+        RestaurantTable table = rawTable.getEffectiveTable();
 
         // 1. Kiểm tra khóa tạm thời do brute-force
-        if (table.isTemporarilyLocked()) {
+        if (rawTable.isTemporarilyLocked() || table.isTemporarilyLocked()) {
             throw new AppException(ErrorCode.TABLE_LOCKED, "Bàn đang bị tạm khóa 60 giây do nhập sai mã PIN quá 5 lần. Vui lòng thử lại sau!");
         }
 
@@ -190,20 +191,23 @@ public class TableQrServiceImpl implements TableQrService {
             throw new AppException(ErrorCode.DEVICE_LIMIT_EXCEEDED, "Bàn đã đạt giới hạn thiết bị kết nối đồng thời!");
         }
 
-        // 3. Kiểm tra mã PIN 4 số
-        String actualPasscode = table.getCurrentPasscode();
-        if (actualPasscode == null) {
-            actualPasscode = table.generateNewPasscode();
-        }
+        // 3. Kiểm tra mã PIN 4 số (chấp nhận mã PIN của bàn phụ hoặc bàn chính)
+        String masterPasscode = table.getCurrentPasscode();
+        String rawPasscode = rawTable.getCurrentPasscode();
+        String inputPass = request.getPasscode() != null ? request.getPasscode().trim() : "";
 
-        if (!actualPasscode.equals(request.getPasscode().trim())) {
-            table.recordFailedAttempt();
-            tableRepository.save(table);
+        boolean matches = (masterPasscode != null && masterPasscode.equals(inputPass))
+                || (rawPasscode != null && rawPasscode.equals(inputPass));
+
+        if (!matches) {
+            rawTable.recordFailedAttempt();
+            tableRepository.save(rawTable);
             throw new AppException(ErrorCode.INVALID_REQUEST, "Mã PIN 4 số không chính xác. Vui lòng kiểm tra lại!");
         }
 
         // 4. Nhập đúng: Reset bộ đếm lỗi & Cấp token phiên
-        table.resetFailedAttempts();
+        rawTable.resetFailedAttempts();
+        tableRepository.save(rawTable);
 
         if (table.getCurrentSessionToken() == null) {
             table.setCurrentSessionToken(UUID.randomUUID().toString());
@@ -239,10 +243,14 @@ public class TableQrServiceImpl implements TableQrService {
                 .build();
         tableSessionDeviceRepository.save(device);
 
+        String displayTableName = rawTable.isLinked()
+                ? "Bàn " + table.getTableNumber() + " (Ghép cùng " + rawTable.getTableNumber() + ")"
+                : table.getName();
+
         return VerifyPasscodeResponse.builder()
                 .tableId(table.getId())
                 .tableNumber(table.getTableNumber())
-                .tableName(table.getName())
+                .tableName(displayTableName)
                 .sessionToken(table.getCurrentSessionToken())
                 .deviceToken(deviceToken)
                 .deviceName(deviceName)
@@ -250,7 +258,7 @@ public class TableQrServiceImpl implements TableQrService {
                 .activeDeviceCount(currentDevices + 1)
                 .status(table.getStatus())
                 .isOrderLocked(table.getIsOrderLocked())
-                .message("Xác thực mã PIN bàn thành công")
+                .message("Xác thực mã PIN bàn thành công" + (rawTable.isLinked() ? " (Đã gia nhập Cụm bàn " + table.getTableNumber() + ")" : ""))
                 .build();
     }
 
@@ -524,6 +532,14 @@ public class TableQrServiceImpl implements TableQrService {
             log.warn("Lỗi tính toán dữ liệu đơn hàng bàn {}: {}", table.getTableNumber(), e.getMessage());
         }
 
+        Long masterId = table.getMasterTable() != null ? table.getMasterTable().getId() : null;
+        String masterNum = table.getMasterTable() != null ? table.getMasterTable().getTableNumber() : null;
+        boolean isMaster = table.isMaster();
+        boolean isLinked = table.isLinked();
+        List<String> linkedNums = isMaster && table.getLinkedTables() != null
+                ? table.getLinkedTables().stream().map(RestaurantTable::getTableNumber).collect(Collectors.toList())
+                : Collections.emptyList();
+
         return TableQrResponse.builder()
                 .id(table.getId())
                 .tableNumber(table.getTableNumber())
@@ -546,6 +562,11 @@ public class TableQrServiceImpl implements TableQrService {
                 .activeItemCount(activeItemCount)
                 .hasCallStaff(hasCallStaff)
                 .isPaying(isPaying)
+                .masterTableId(masterId)
+                .masterTableNumber(masterNum)
+                .isMaster(isMaster)
+                .isLinked(isLinked)
+                .linkedTableNumbers(linkedNums)
                 .build();
     }
 

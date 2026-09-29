@@ -36,4 +36,9 @@ public class TableQrResponse {
     private Integer activeItemCount;
     private Boolean hasCallStaff;
     private Boolean isPaying;
+    private Long masterTableId;
+    private String masterTableNumber;
+    private Boolean isMaster;
+    private Boolean isLinked;
+    private java.util.List<String> linkedTableNumbers;
 }

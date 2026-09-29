@@ -1,8 +1,10 @@
 package com.hoadiemcat.service;
 
+import com.hoadiemcat.dto.request.TableClusterLinkRequest;
 import com.hoadiemcat.dto.request.TableDirectTransferRequest;
 import com.hoadiemcat.dto.request.TableTransferConfirmRequest;
 import com.hoadiemcat.dto.request.TableTransferRequest;
+import com.hoadiemcat.dto.response.TableClusterResponse;
 import com.hoadiemcat.dto.response.TableTransferConfirmResponse;
 import com.hoadiemcat.dto.response.TableTransferResponse;
 
@@ -27,6 +29,16 @@ public interface TableTransferService {
      * Nhân viên / Quản lý thực hiện chuyển hoặc ghép bàn trực tiếp 1 chạm từ POS.
      */
     TableTransferConfirmResponse directTransfer(TableDirectTransferRequest request, String username);
+
+    /**
+     * Nhân viên / Quản lý tạo Cụm Bàn Liên Kết (Master - Slave) cho đoàn tiệc lớn.
+     */
+    TableClusterResponse linkTablesToCluster(TableClusterLinkRequest request, String username);
+
+    /**
+     * Nhân viên / Quản lý hủy liên kết 1 bàn phụ ra khỏi Cụm Bàn.
+     */
+    TableClusterResponse unlinkTableFromCluster(Long slaveTableId, String username);
 
     /**
      * Quét và hủy các mã chuyển bàn quá hạn 5 phút.

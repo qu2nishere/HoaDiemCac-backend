@@ -38,3 +38,6 @@ bin/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Uploads directory
+uploads/

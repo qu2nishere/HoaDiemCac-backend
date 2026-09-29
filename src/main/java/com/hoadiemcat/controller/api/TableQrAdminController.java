@@ -132,4 +132,28 @@ public class TableQrAdminController {
         TableTransferConfirmResponse response = tableTransferService.directTransfer(request, username);
         return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
     }
+
+    @PostMapping("/clusters/link")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'WAITER')")
+    @Operation(summary = "Nhân viên / Quản lý tạo Cụm Bàn Liên Kết (Master - Slave) cho đoàn tiệc lớn")
+    public ResponseEntity<ApiResponse<com.hoadiemcat.dto.response.TableClusterResponse>> linkTablesToCluster(
+            @Valid @RequestBody com.hoadiemcat.dto.request.TableClusterLinkRequest request,
+            Principal principal
+    ) {
+        String username = principal != null ? principal.getName() : "ADMIN";
+        com.hoadiemcat.dto.response.TableClusterResponse response = tableTransferService.linkTablesToCluster(request, username);
+        return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
+    }
+
+    @PostMapping("/clusters/unlink/{slaveTableId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'WAITER')")
+    @Operation(summary = "Nhân viên / Quản lý tách một bàn phụ ra khỏi Cụm Bàn")
+    public ResponseEntity<ApiResponse<com.hoadiemcat.dto.response.TableClusterResponse>> unlinkTableFromCluster(
+            @PathVariable Long slaveTableId,
+            Principal principal
+    ) {
+        String username = principal != null ? principal.getName() : "ADMIN";
+        com.hoadiemcat.dto.response.TableClusterResponse response = tableTransferService.unlinkTableFromCluster(slaveTableId, username);
+        return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
+    }
 }

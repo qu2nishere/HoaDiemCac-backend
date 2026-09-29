@@ -1,10 +1,12 @@
 package com.hoadiemcat.service.impl;
 
 import com.hoadiemcat.dto.request.DraftCartItemRequest;
+import com.hoadiemcat.dto.request.TableClusterLinkRequest;
 import com.hoadiemcat.dto.request.TableDirectTransferRequest;
 import com.hoadiemcat.dto.request.TableTransferConfirmRequest;
 import com.hoadiemcat.dto.request.TableTransferRequest;
 import com.hoadiemcat.dto.response.DraftCartItemResponse;
+import com.hoadiemcat.dto.response.TableClusterResponse;
 import com.hoadiemcat.dto.response.TableTransferConfirmResponse;
 import com.hoadiemcat.dto.response.TableTransferResponse;
 import com.hoadiemcat.entity.*;
@@ -224,6 +226,18 @@ public class TableTransferServiceImpl implements TableTransferService {
             targetTable.setCurrentSessionToken(UUID.randomUUID().toString());
         }
         String newSessionToken = targetTable.getCurrentSessionToken();
+
+        // Kiểm tra bảo mật khi GHÉP BÀN (MERGE): Bắt buộc nhập đúng mã PIN bàn đích để chống đổ nợ hóa đơn sang người lạ
+        boolean isStaff = deviceToken != null && (deviceToken.startsWith("STAFF_") || deviceToken.startsWith("ADMIN_") || "STAFF_DIRECT_TOKEN".equals(deviceToken));
+        if (transfer.getTransferType() == TransferType.MERGE && !isStaff) {
+            String targetPass = targetTable.getCurrentPasscode();
+            String inputPass = request.getTargetPasscode();
+            if (targetPass != null && !targetPass.isBlank()) {
+                if (inputPass == null || !inputPass.trim().equals(targetPass.trim())) {
+                    throw new AppException(ErrorCode.INVALID_REQUEST, "Để ghép vào bàn đang có khách, vui lòng nhập đúng mã PIN 4 số của bàn đích để xác thực!");
+                }
+            }
+        }
 
         int activeOrderRounds = 0;
 
@@ -498,17 +512,120 @@ public class TableTransferServiceImpl implements TableTransferService {
         tableSessionDeviceRepository.saveAll(oldDevices);
     }
 
+    @Override
+    @Transactional
+    public TableClusterResponse linkTablesToCluster(TableClusterLinkRequest request, String username) {
+        RestaurantTable masterTable = tableRepository.findById(request.getMasterTableId())
+                .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "id", request.getMasterTableId()));
+
+        if (masterTable.isLinked()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn này đang là bàn phụ của một cụm khác, không thể làm bàn chính");
+        }
+
+        // Đảm bảo bàn chính có Session Token và ở trạng thái OCCUPIED
+        if (masterTable.getCurrentSessionToken() == null) {
+            masterTable.setCurrentSessionToken(UUID.randomUUID().toString());
+        }
+        if (masterTable.getStatus() == TableStatus.AVAILABLE) {
+            masterTable.setStatus(TableStatus.OCCUPIED);
+            masterTable.setSessionStartedAt(LocalDateTime.now());
+        }
+        if (masterTable.getCurrentPasscode() == null) {
+            masterTable.generateNewPasscode();
+        }
+        tableRepository.save(masterTable);
+
+        List<String> linkedNumbers = new ArrayList<>();
+        int addedCapacity = masterTable.getCapacity() != null ? masterTable.getCapacity() : 4;
+
+        for (Long slaveId : request.getSlaveTableIds()) {
+            if (slaveId.equals(masterTable.getId())) continue;
+
+            RestaurantTable slave = tableRepository.findById(slaveId)
+                    .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "id", slaveId));
+
+            // Kiểm tra bàn phụ có đang trong tiến trình thanh toán không
+            boolean hasPendingInvoice = invoiceRepository.findByRestaurantTableId(slave.getId()).stream()
+                    .anyMatch(inv -> inv.getPaymentStatus() == PaymentStatus.PENDING);
+            if (hasPendingInvoice) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn " + slave.getTableNumber() + " đang trong quy trình thanh toán, không thể ghép cụm");
+            }
+
+            // Gán liên kết vào masterTable
+            slave.setMasterTable(masterTable);
+            slave.setStatus(TableStatus.OCCUPIED);
+            slave.setCurrentSessionToken(masterTable.getCurrentSessionToken());
+            slave.setCurrentPasscode(masterTable.getCurrentPasscode());
+            slave.setIsOrderLocked(false);
+            tableRepository.save(slave);
+
+            linkedNumbers.add(slave.getTableNumber());
+            addedCapacity += (slave.getCapacity() != null ? slave.getCapacity() : 4);
+            broadcastTableUpdate(slave);
+        }
+
+        broadcastTableUpdate(masterTable);
+
+        log.info("Nhân viên {} đã tạo Cụm bàn tiệc lớn: Master {} liên kết với {}", username, masterTable.getTableNumber(), linkedNumbers);
+
+        return TableClusterResponse.builder()
+                .masterTableId(masterTable.getId())
+                .masterTableNumber(masterTable.getTableNumber())
+                .masterTableName(masterTable.getName())
+                .linkedTableNumbers(linkedNumbers)
+                .totalCapacity(addedCapacity)
+                .message("Đã liên kết Cụm bàn thành công cho bàn " + masterTable.getTableNumber() + "!")
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public TableClusterResponse unlinkTableFromCluster(Long slaveTableId, String username) {
+        RestaurantTable slave = tableRepository.findById(slaveTableId)
+                .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "id", slaveTableId));
+
+        if (!slave.isLinked()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn " + slave.getTableNumber() + " không nằm trong cụm bàn liên kết nào");
+        }
+
+        RestaurantTable master = slave.getMasterTable();
+        slave.setMasterTable(null);
+        resetSourceTableSession(slave);
+
+        broadcastTableUpdate(slave);
+        broadcastTableUpdate(master);
+
+        log.info("Nhân viên {} đã tách bàn phụ {} ra khỏi Cụm bàn {}", username, slave.getTableNumber(), master.getTableNumber());
+
+        List<String> remainingSlaves = tableRepository.findByMasterTable(master).stream()
+                .map(RestaurantTable::getTableNumber)
+                .collect(java.util.stream.Collectors.toList());
+
+        return TableClusterResponse.builder()
+                .masterTableId(master.getId())
+                .masterTableNumber(master.getTableNumber())
+                .masterTableName(master.getName())
+                .linkedTableNumbers(remainingSlaves)
+                .totalCapacity(master.getCapacity())
+                .message("Đã tách bàn " + slave.getTableNumber() + " ra khỏi cụm bàn " + master.getTableNumber() + " thành công!")
+                .build();
+    }
+
     private void broadcastTableUpdate(RestaurantTable table) {
         if (messagingTemplate != null && table != null) {
             try {
-                messagingTemplate.convertAndSend("/topic/tables", Map.of(
-                        "id", table.getId(),
-                        "tableNumber", table.getTableNumber(),
-                        "name", table.getName(),
-                        "status", table.getStatus(),
-                        "isOrderLocked", table.getIsOrderLocked(),
-                        "activeDeviceCount", table.getActiveDeviceCount() != null ? table.getActiveDeviceCount() : 0
-                ));
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("id", table.getId());
+                payload.put("tableNumber", table.getTableNumber());
+                payload.put("name", table.getName());
+                payload.put("status", table.getStatus());
+                payload.put("isOrderLocked", table.getIsOrderLocked());
+                payload.put("activeDeviceCount", table.getActiveDeviceCount() != null ? table.getActiveDeviceCount() : 0);
+                payload.put("isMaster", table.isMaster());
+                payload.put("isLinked", table.isLinked());
+                payload.put("masterTableNumber", table.getMasterTable() != null ? table.getMasterTable().getTableNumber() : null);
+
+                messagingTemplate.convertAndSend("/topic/tables", payload);
             } catch (Exception e) {
                 log.warn("Không thể gửi thông báo WebSocket cập nhật bàn qua /topic/tables: {}", e.getMessage());
             }

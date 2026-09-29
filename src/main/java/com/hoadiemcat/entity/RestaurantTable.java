@@ -27,7 +27,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString
+@ToString(exclude = {"masterTable", "linkedTables"})
 public class RestaurantTable extends BaseEntity {
 
     /**
@@ -162,6 +162,33 @@ public class RestaurantTable extends BaseEntity {
         if (this.failedAttempts >= 5) {
             this.lockedUntil = LocalDateTime.now().plusSeconds(60);
         }
+    }
+
+    /**
+     * Bàn chính (Master Table) mà bàn này đang liên kết ghép tiệc vào.
+     * Nếu null, bàn này hoạt động độc lập hoặc đóng vai trò là Bàn chính.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "master_table_id")
+    private RestaurantTable masterTable;
+
+    /**
+     * Danh sách các bàn phụ (Slave Tables) đang ghép liên kết vào bàn chính này.
+     */
+    @OneToMany(mappedBy = "masterTable", fetch = FetchType.LAZY)
+    @Builder.Default
+    private java.util.List<RestaurantTable> linkedTables = new java.util.ArrayList<>();
+
+    public boolean isMaster() {
+        return linkedTables != null && !linkedTables.isEmpty();
+    }
+
+    public boolean isLinked() {
+        return masterTable != null;
+    }
+
+    public RestaurantTable getEffectiveTable() {
+        return masterTable != null ? masterTable : this;
     }
 
     /**

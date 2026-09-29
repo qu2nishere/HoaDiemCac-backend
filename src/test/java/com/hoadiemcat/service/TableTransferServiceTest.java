@@ -1,9 +1,11 @@
 package com.hoadiemcat.service;
 
 import com.hoadiemcat.dto.request.DraftCartItemRequest;
+import com.hoadiemcat.dto.request.TableClusterLinkRequest;
 import com.hoadiemcat.dto.request.TableTransferConfirmRequest;
 import com.hoadiemcat.dto.request.TableTransferRequest;
 import com.hoadiemcat.dto.response.DraftCartItemResponse;
+import com.hoadiemcat.dto.response.TableClusterResponse;
 import com.hoadiemcat.dto.response.TableTransferConfirmResponse;
 import com.hoadiemcat.dto.response.TableTransferResponse;
 import com.hoadiemcat.entity.*;
@@ -214,6 +216,7 @@ class TableTransferServiceTest {
         TableTransferConfirmRequest request = TableTransferConfirmRequest.builder()
                 .targetTableNumber("B05")
                 .transferCode("TRF-9999")
+                .targetPasscode("5555")
                 .build();
 
         TableTransferConfirmResponse response = tableTransferService.confirmTransfer(request, "member-token");
@@ -401,5 +404,89 @@ class TableTransferServiceTest {
         assertEquals("Lẩu Thái Hoàng Gia", confirmResponse.getCartItems().get(0).getName());
         assertEquals(2, confirmResponse.getCartItems().get(0).getQuantity());
         assertEquals("Không hành", confirmResponse.getCartItems().get(0).getNote());
+    }
+
+    @Test
+    @DisplayName("TC-TRF-10: Từ chối Ghép bàn khi khách hàng nhập sai hoặc thiếu mã PIN bàn đích (Chống gian lận dồn bill)")
+    void testConfirmTransfer_Merge_ThrowsWhenTargetPasscodeInvalid() {
+        targetTable.setStatus(TableStatus.OCCUPIED);
+
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-9999")
+                .transferType(TransferType.MERGE)
+                .sourceTable(sourceTable)
+                .sourceSessionToken("session-token-b01")
+                .createdByDevice("device-host-1")
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-9999")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+
+        TableTransferConfirmRequest wrongPasscodeReq = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-9999")
+                .targetPasscode("0000") // targetTable passcode is "5555"
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.confirmTransfer(wrongPasscodeReq, "customer-device-token"));
+        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("TC-TRF-11: Tạo Cụm bàn tiệc lớn thành công (Master-Slave Table Clustering)")
+    void testLinkTablesToCluster_Success() {
+        RestaurantTable slaveTable = RestaurantTable.builder()
+                .tableNumber("B06")
+                .name("Bàn 06")
+                .status(TableStatus.AVAILABLE)
+                .capacity(4)
+                .build();
+        slaveTable.setId(6L);
+
+        when(tableRepository.findById(5L)).thenReturn(Optional.of(targetTable));
+        when(tableRepository.findById(6L)).thenReturn(Optional.of(slaveTable));
+        when(invoiceRepository.findByRestaurantTableId(6L)).thenReturn(Collections.emptyList());
+
+        TableClusterLinkRequest request = TableClusterLinkRequest.builder()
+                .masterTableId(5L)
+                .slaveTableIds(List.of(6L))
+                .build();
+
+        TableClusterResponse response = tableTransferService.linkTablesToCluster(request, "staff01");
+
+        assertNotNull(response);
+        assertEquals(5L, response.getMasterTableId());
+        assertTrue(response.getLinkedTableNumbers().contains("B06"));
+        assertEquals(targetTable, slaveTable.getMasterTable());
+        assertEquals(TableStatus.OCCUPIED, slaveTable.getStatus());
+        assertEquals(targetTable.getCurrentSessionToken(), slaveTable.getCurrentSessionToken());
+        assertEquals(targetTable.getCurrentPasscode(), slaveTable.getCurrentPasscode());
+        verify(tableRepository).save(slaveTable);
+    }
+
+    @Test
+    @DisplayName("TC-TRF-12: Tách bàn phụ ra khỏi Cụm bàn liên kết thành công")
+    void testUnlinkTableFromCluster_Success() {
+        RestaurantTable slaveTable = RestaurantTable.builder()
+                .tableNumber("B06")
+                .name("Bàn 06")
+                .status(TableStatus.OCCUPIED)
+                .capacity(4)
+                .masterTable(targetTable)
+                .build();
+        slaveTable.setId(6L);
+
+        when(tableRepository.findById(6L)).thenReturn(Optional.of(slaveTable));
+        when(tableRepository.findByMasterTable(targetTable)).thenReturn(Collections.emptyList());
+
+        TableClusterResponse response = tableTransferService.unlinkTableFromCluster(6L, "staff01");
+
+        assertNotNull(response);
+        assertNull(slaveTable.getMasterTable());
+        assertEquals(TableStatus.AVAILABLE, slaveTable.getStatus());
+        verify(tableRepository, atLeastOnce()).save(slaveTable);
     }
 }
