@@ -151,6 +151,16 @@ public class TableQrServiceImpl implements TableQrService {
 
     @Override
     @Transactional
+    public TableQrResponse setOrderLock(Long id, boolean locked) {
+        RestaurantTable table = findTableEntity(id);
+        table.setIsOrderLocked(locked);
+        RestaurantTable saved = tableRepository.save(table);
+        broadcastTableUpdate(saved);
+        return mapToResponse(saved);
+    }
+
+    @Override
+    @Transactional
     public TableQrResponse updateTableStatus(Long id, TableStatus status) {
         RestaurantTable table = findTableEntity(id);
         if (status == TableStatus.AVAILABLE) {
@@ -166,9 +176,16 @@ public class TableQrServiceImpl implements TableQrService {
     private void broadcastTableUpdate(RestaurantTable table) {
         if (messagingTemplate != null && table != null) {
             try {
-                messagingTemplate.convertAndSend("/topic/tables", mapToResponse(table));
+                TableQrResponse resp = mapToResponse(table);
+                messagingTemplate.convertAndSend("/topic/tables", resp);
+                if (table.getTableNumber() != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/status", resp);
+                }
+                if (table.getCurrentSessionToken() != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + table.getCurrentSessionToken(), resp);
+                }
             } catch (Exception e) {
-                log.warn("Không thể gửi thông báo WebSocket cập nhật bàn qua /topic/tables: {}", e.getMessage());
+                log.warn("Không thể gửi thông báo WebSocket cập nhật bàn: {}", e.getMessage());
             }
         }
     }
