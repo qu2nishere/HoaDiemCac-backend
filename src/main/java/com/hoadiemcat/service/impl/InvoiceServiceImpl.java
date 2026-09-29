@@ -42,6 +42,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final TableQrService tableQrService;
     private final com.hoadiemcat.repository.OrderRepository orderRepository;
     private final com.hoadiemcat.repository.CallStaffLogRepository callStaffLogRepository;
+    private final com.hoadiemcat.repository.TableTransferRepository tableTransferRepository;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     @Override
@@ -101,7 +102,28 @@ public class InvoiceServiceImpl implements InvoiceService {
             cashier = userRepository.findByUsername(cashierUsername).orElse(null);
         }
 
-        List<com.hoadiemcat.entity.Order> orders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(table);
+        List<RestaurantTable> clusterTables = new ArrayList<>();
+        clusterTables.add(table);
+        List<RestaurantTable> linkedSlaves = tableRepository.findByMasterTable(table);
+        if (linkedSlaves != null && !linkedSlaves.isEmpty()) {
+            clusterTables.addAll(linkedSlaves);
+        }
+
+        // Tự động hủy mọi yêu cầu chuyển/ghép bàn PENDING của bàn chính lẫn các bàn phụ
+        for (RestaurantTable t : clusterTables) {
+            tableTransferRepository.findFirstBySourceTableAndStatus(t, com.hoadiemcat.entity.enums.TransferStatus.PENDING)
+                    .ifPresent(trf -> {
+                        trf.setStatus(com.hoadiemcat.entity.enums.TransferStatus.CANCELLED);
+                        tableTransferRepository.save(trf);
+                    });
+        }
+
+        // BẢO VỆ DOANH THU CỤM BÀN: Gom toàn bộ Order của bàn chính lẫn tất cả bàn phụ liên kết
+        List<com.hoadiemcat.entity.Order> orders = new ArrayList<>();
+        for (RestaurantTable t : clusterTables) {
+            orders.addAll(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(t));
+        }
+
         BigDecimal subtotal = orders.stream()
                 .filter(o -> o.getStatus() != com.hoadiemcat.entity.enums.OrderStatus.CANCELLED)
                 .flatMap(o -> o.getOrderItems() != null ? o.getOrderItems().stream() : java.util.stream.Stream.empty())
@@ -155,20 +177,35 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
         orderRepository.saveAll(orders);
 
-        // Giải quyết chuông gọi nhân viên đang chờ (nếu có)
-        List<com.hoadiemcat.entity.CallStaffLog> pendingLogs = callStaffLogRepository.findByRestaurantTableAndStatus(
-                table, com.hoadiemcat.entity.enums.CallStaffStatus.PENDING
-        );
-        for (com.hoadiemcat.entity.CallStaffLog l : pendingLogs) {
-            l.setStatus(com.hoadiemcat.entity.enums.CallStaffStatus.RESOLVED);
-            l.setResolvedAt(LocalDateTime.now());
+        // Giải quyết chuông gọi nhân viên đang chờ (nếu có) trên toàn bộ cụm bàn
+        for (RestaurantTable t : clusterTables) {
+            List<com.hoadiemcat.entity.CallStaffLog> pendingLogs = callStaffLogRepository.findByRestaurantTableAndStatus(
+                    t, com.hoadiemcat.entity.enums.CallStaffStatus.PENDING
+            );
+            for (com.hoadiemcat.entity.CallStaffLog l : pendingLogs) {
+                l.setStatus(com.hoadiemcat.entity.enums.CallStaffStatus.RESOLVED);
+                l.setResolvedAt(LocalDateTime.now());
+            }
+            callStaffLogRepository.saveAll(pendingLogs);
         }
-        callStaffLogRepository.saveAll(pendingLogs);
 
         // Kích hoạt giải phóng phiên bàn ăn: Xoay mã PIN 4 số mới và thu hồi Session Token cũ
         tableQrService.releaseTableSession(tableId);
         table.setStatus(TableStatus.CLEANING);
         RestaurantTable savedTable = tableRepository.save(table);
+
+        // ĐẶT TOÀN BỘ BÀN PHỤ CỤM SANG CLEANING (chờ dọn dẹp) để tránh xếp khách mới vào bàn bẩn
+        if (linkedSlaves != null && !linkedSlaves.isEmpty()) {
+            for (RestaurantTable slave : linkedSlaves) {
+                slave.setStatus(TableStatus.CLEANING);
+                tableRepository.save(slave);
+                try {
+                    if (messagingTemplate != null) {
+                        messagingTemplate.convertAndSend("/topic/tables", tableQrService.getTableById(slave.getId()));
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
 
         try {
             if (messagingTemplate != null) {

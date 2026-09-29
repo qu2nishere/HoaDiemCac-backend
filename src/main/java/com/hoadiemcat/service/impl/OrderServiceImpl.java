@@ -89,6 +89,13 @@ public class OrderServiceImpl implements OrderService {
                             .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "tableNumber", searchTableNumber));
                 });
 
+        // BẢO VỆ DOANH THU CỤM BÀN: Nếu đặt món vào Bàn phụ, luôn gắn đơn hàng vào Bàn chính (Master)
+        if (table.isLinked()) {
+            log.info("Đặt món cho bàn phụ {}, tự động chuyển quyền sở hữu đơn hàng về Bàn chính {}",
+                    table.getTableNumber(), table.getMasterTable() != null ? table.getMasterTable().getTableNumber() : "N/A");
+            table = table.getEffectiveTable();
+        }
+
         String sessionToken = request.getSessionToken();
         if (sessionToken == null || sessionToken.isBlank()) {
             sessionToken = table.getCurrentSessionToken() != null ? table.getCurrentSessionToken() : "SESSION_" + table.getTableNumber();
