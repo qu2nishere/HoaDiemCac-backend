@@ -16,6 +16,7 @@ import java.util.Map;
 public class DashboardSummaryResponse {
 
     private BigDecimal totalRevenue;
+    private BigDecimal totalTax;
     private Long totalInvoices;
     private BigDecimal averageOrderValue;
     private Double occupancyRate;
@@ -28,6 +29,7 @@ public class DashboardSummaryResponse {
     private Integer totalTables;
     private List<RevenueChartPoint> revenueChart;
     private List<TopSellingDish> topSellingDishes;
+    private List<InvoiceResponse> recentInvoices;
 
     @Data
     @Builder
