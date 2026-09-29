@@ -27,4 +27,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT o FROM Order o WHERE (o.restaurantTable.tableNumber = :tableNumber OR o.restaurantTable.name = :tableNumber) ORDER BY o.createdAt ASC")
     List<Order> findByTableNumberOrderByCreatedAtAsc(@Param("tableNumber") String tableNumber);
+
+    @Query("SELECT o FROM Order o WHERE (o.restaurantTable.tableNumber = :tableNumber OR o.restaurantTable.name = :tableNumber) AND o.sessionToken = :sessionToken ORDER BY o.createdAt ASC")
+    List<Order> findByTableNumberAndSessionTokenOrderByCreatedAtAsc(
+            @Param("tableNumber") String tableNumber,
+            @Param("sessionToken") String sessionToken
+    );
 }

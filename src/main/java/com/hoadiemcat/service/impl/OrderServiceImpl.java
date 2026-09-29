@@ -10,6 +10,7 @@ import com.hoadiemcat.entity.OrderItem;
 import com.hoadiemcat.entity.RestaurantTable;
 import com.hoadiemcat.entity.enums.OrderItemStatus;
 import com.hoadiemcat.entity.enums.OrderStatus;
+import com.hoadiemcat.entity.enums.TableStatus;
 import com.hoadiemcat.exception.ResourceNotFoundException;
 import com.hoadiemcat.repository.MenuItemRepository;
 import com.hoadiemcat.repository.OrderItemRepository;
@@ -171,8 +172,20 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public List<OrderResponse> getTableOrders(String tableNumber) {
         String normalized = normalizeTableNumber(tableNumber);
+        RestaurantTable table = restaurantTableRepository.findByTableNumber(normalized)
+                .or(() -> restaurantTableRepository.findByName(normalized))
+                .orElse(null);
+
+        if (table != null && table.getCurrentSessionToken() != null && table.getStatus() == TableStatus.OCCUPIED) {
+            return orderRepository.findByTableNumberAndSessionTokenOrderByCreatedAtAsc(normalized, table.getCurrentSessionToken())
+                    .stream()
+                    .map(this::mapToResponse)
+                    .collect(Collectors.toList());
+        }
+
         return orderRepository.findByTableNumberOrderByCreatedAtAsc(normalized)
                 .stream()
+                .filter(o -> o.getStatus() != OrderStatus.COMPLETED && o.getStatus() != OrderStatus.CANCELLED)
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
