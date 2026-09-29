@@ -77,6 +77,17 @@ public class TableQrAdminController {
         return ResponseEntity.ok(ApiResponse.success(msg, updated));
     }
 
+    @PostMapping("/{id}/lock-order")
+    @Operation(summary = "Khóa hoặc mở khóa quyền gọi món của bàn với trạng thái chỉ định")
+    public ResponseEntity<ApiResponse<TableQrResponse>> setOrderLock(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "true") boolean locked
+    ) {
+        TableQrResponse updated = tableQrService.setOrderLock(id, locked);
+        String msg = updated.getIsOrderLocked() ? "Đã đóng và khóa order cho bàn" : "Đã mở khóa gọi món cho bàn";
+        return ResponseEntity.ok(ApiResponse.success(msg, updated));
+    }
+
     @PutMapping("/{id}/status")
     @Operation(summary = "Cập nhật trạng thái vận hành của bàn (AVAILABLE, OCCUPIED, CLEANING)")
     public ResponseEntity<ApiResponse<TableQrResponse>> updateStatus(

@@ -36,6 +36,8 @@ public class TableQrServiceImpl implements TableQrService {
     private final RestaurantTableRepository tableRepository;
     private final TableSessionDeviceRepository tableSessionDeviceRepository;
     private final com.hoadiemcat.repository.OrderRepository orderRepository;
+    private final com.hoadiemcat.repository.OrderItemRepository orderItemRepository;
+    private final com.hoadiemcat.repository.CartRepository cartRepository;
     private final com.hoadiemcat.repository.CallStaffLogRepository callStaffLogRepository;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
@@ -151,6 +153,16 @@ public class TableQrServiceImpl implements TableQrService {
 
     @Override
     @Transactional
+    public TableQrResponse setOrderLock(Long id, boolean locked) {
+        RestaurantTable table = findTableEntity(id);
+        table.setIsOrderLocked(locked);
+        RestaurantTable saved = tableRepository.save(table);
+        broadcastTableUpdate(saved);
+        return mapToResponse(saved);
+    }
+
+    @Override
+    @Transactional
     public TableQrResponse updateTableStatus(Long id, TableStatus status) {
         RestaurantTable table = findTableEntity(id);
         if (status == TableStatus.AVAILABLE) {
@@ -166,9 +178,16 @@ public class TableQrServiceImpl implements TableQrService {
     private void broadcastTableUpdate(RestaurantTable table) {
         if (messagingTemplate != null && table != null) {
             try {
-                messagingTemplate.convertAndSend("/topic/tables", mapToResponse(table));
+                TableQrResponse resp = mapToResponse(table);
+                messagingTemplate.convertAndSend("/topic/tables", resp);
+                if (table.getTableNumber() != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/status", resp);
+                }
+                if (table.getCurrentSessionToken() != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + table.getCurrentSessionToken(), resp);
+                }
             } catch (Exception e) {
-                log.warn("Không thể gửi thông báo WebSocket cập nhật bàn qua /topic/tables: {}", e.getMessage());
+                log.warn("Không thể gửi thông báo WebSocket cập nhật bàn: {}", e.getMessage());
             }
         }
     }
@@ -267,7 +286,7 @@ public class TableQrServiceImpl implements TableQrService {
     public boolean validateSessionToken(String sessionToken) {
         if (sessionToken == null || sessionToken.isBlank()) return false;
         return tableRepository.findByCurrentSessionToken(sessionToken)
-                .map(t -> t.getStatus() == TableStatus.OCCUPIED && !Boolean.TRUE.equals(t.getIsOrderLocked()))
+                .map(t -> t.getStatus() == TableStatus.OCCUPIED)
                 .orElse(false);
     }
 
@@ -316,6 +335,71 @@ public class TableQrServiceImpl implements TableQrService {
             d.setIsActive(false);
         }
         tableSessionDeviceRepository.saveAll(oldDevices);
+
+        // Xóa sạch toàn bộ các đợt order và log order-item của bàn để sẵn sàng đón lượt khách mới
+        cleanTableOrdersAndLogs(table);
+    }
+
+    /**
+     * Dọn sạch toàn bộ log đơn hàng, order-item, giỏ hàng và chuông gọi phục vụ của bàn khi bàn trở về AVAILABLE
+     */
+    private void cleanTableOrdersAndLogs(RestaurantTable table) {
+        if (table == null) return;
+        try {
+            // 1. Xóa toàn bộ các đợt order và từng chi tiết món ăn (order_items) của bàn
+            List<com.hoadiemcat.entity.Order> orders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(table);
+            if (orders != null && !orders.isEmpty()) {
+                for (com.hoadiemcat.entity.Order o : orders) {
+                    if (o.getOrderItems() != null && !o.getOrderItems().isEmpty()) {
+                        orderItemRepository.deleteAll(o.getOrderItems());
+                        o.getOrderItems().clear();
+                    }
+                }
+                orderRepository.deleteAll(orders);
+                log.info("🧹 Đã dọn sạch {} đợt order và toàn bộ order-items của bàn {} ({}) để sẵn sàng đón lượt khách mới",
+                        orders.size(), table.getTableNumber(), table.getName());
+            }
+
+            // 2. Xóa giỏ hàng chưa chốt (nếu có)
+            if (cartRepository != null) {
+                cartRepository.deleteByRestaurantTable(table);
+            }
+
+            // 3. Giải quyết toàn bộ chuông gọi phục vụ / yêu cầu thanh toán còn tồn đọng của bàn
+            if (callStaffLogRepository != null) {
+                List<com.hoadiemcat.entity.CallStaffLog> pendingLogs = callStaffLogRepository.findByRestaurantTableAndStatus(
+                        table, com.hoadiemcat.entity.enums.CallStaffStatus.PENDING
+                );
+                if (pendingLogs != null && !pendingLogs.isEmpty()) {
+                    for (com.hoadiemcat.entity.CallStaffLog l : pendingLogs) {
+                        l.setStatus(com.hoadiemcat.entity.enums.CallStaffStatus.RESOLVED);
+                        l.setResolvedAt(LocalDateTime.now());
+                    }
+                    callStaffLogRepository.saveAll(pendingLogs);
+                }
+            }
+
+            // 4. Phát tín hiệu WebSocket thông báo KDS và Bàn ăn làm sạch dữ liệu
+            if (messagingTemplate != null) {
+                try {
+                    messagingTemplate.convertAndSend("/topic/kitchen/orders", java.util.Map.of(
+                            "type", "TABLE_RESET_AVAILABLE",
+                            "tableId", table.getId() != null ? table.getId() : 0,
+                            "tableNumber", table.getTableNumber() != null ? table.getTableNumber() : ""
+                    ));
+                    if (table.getTableNumber() != null) {
+                        messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/status", java.util.Map.of(
+                                "type", "TABLE_RESET_AVAILABLE",
+                                "status", TableStatus.AVAILABLE.name()
+                        ));
+                    }
+                } catch (Exception wsEx) {
+                    log.warn("Không thể gửi thông báo WebSocket dọn dẹp bàn {}: {}", table.getTableNumber(), wsEx.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Lỗi khi dọn dẹp order và logs của bàn {}: {}", table.getTableNumber(), e.getMessage(), e);
+        }
     }
 
     @Override

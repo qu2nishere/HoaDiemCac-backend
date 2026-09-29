@@ -1,6 +1,7 @@
 package com.hoadiemcat.service.impl;
 
 import com.hoadiemcat.dto.response.InvoiceResponse;
+import com.hoadiemcat.dto.response.TableQrResponse;
 import com.hoadiemcat.entity.Invoice;
 import com.hoadiemcat.entity.RestaurantTable;
 import com.hoadiemcat.entity.User;
@@ -46,7 +47,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public Page<InvoiceResponse> searchInvoices(
             String query,
             PaymentStatus status,
@@ -55,10 +56,6 @@ public class InvoiceServiceImpl implements InvoiceService {
             LocalDateTime endDate,
             Pageable pageable
     ) {
-        if (invoiceRepository.count() == 0) {
-            seedDefaultInvoices();
-        }
-
         Page<Invoice> page = invoiceRepository.searchInvoices(
                 (query != null && !query.isBlank()) ? query.trim() : null,
                 status,
@@ -198,6 +195,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         // Kích hoạt giải phóng phiên bàn ăn: Xoay mã PIN 4 số mới và thu hồi Session Token cũ
+        String oldSessionToken = table.getCurrentSessionToken();
         tableQrService.releaseTableSession(tableId);
         table.setStatus(TableStatus.CLEANING);
         RestaurantTable savedTable = tableRepository.save(table);
@@ -217,10 +215,30 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         try {
             if (messagingTemplate != null) {
-                messagingTemplate.convertAndSend("/topic/tables", tableQrService.getTableById(tableId));
+                TableQrResponse tableResp = tableQrService.getTableById(tableId);
+                messagingTemplate.convertAndSend("/topic/tables", tableResp);
+
+                // Bắn thông báo kết thúc phiên trực tiếp tới khách hàng tại bàn để kill session
+                java.util.Map<String, Object> sessionKillMsg = java.util.Map.of(
+                        "type", "TABLE_SESSION_ENDED",
+                        "status", TableStatus.CLEANING.name(),
+                        "tableNumber", table.getTableNumber(),
+                        "message", "Bàn ăn đã hoàn tất thanh toán và chuyển sang trạng thái dọn dẹp. Cảm ơn quý khách!"
+                );
+                messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/status", sessionKillMsg);
+                if (table.getName() != null && !table.getName().equals(table.getTableNumber())) {
+                    messagingTemplate.convertAndSend("/topic/table/" + table.getName() + "/status", sessionKillMsg);
+                }
+                if (oldSessionToken != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + oldSessionToken, java.util.Map.of(
+                            "event", "SESSION_KILLED",
+                            "status", TableStatus.CLEANING.name(),
+                            "message", "Phiên phục vụ của bàn đã kết thúc."
+                    ));
+                }
             }
         } catch (Exception e) {
-            log.warn("Không thể gửi thông báo WebSocket cập nhật bàn qua /topic/tables sau thanh toán: {}", e.getMessage());
+            log.warn("Không thể gửi thông báo WebSocket cập nhật bàn sau thanh toán: {}", e.getMessage());
         }
 
         return mapToResponse(saved);

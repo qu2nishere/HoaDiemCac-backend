@@ -24,6 +24,8 @@ public interface TableQrService {
 
     TableQrResponse toggleOrderLock(Long id);
 
+    TableQrResponse setOrderLock(Long id, boolean locked);
+
     TableQrResponse updateTableStatus(Long id, TableStatus status);
 
     VerifyPasscodeResponse verifyPasscode(String tableIdentifier, VerifyPasscodeRequest request);
