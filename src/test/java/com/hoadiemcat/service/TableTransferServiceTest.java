@@ -613,4 +613,59 @@ class TableTransferServiceTest {
                 tableTransferService.linkTablesToCluster(request, "staff01"));
         assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
     }
+
+    @Test
+    @DisplayName("EDGE-19: Từ chối Chuyển bàn khi phiên bàn nguồn đã thay đổi hoặc đã kết thúc")
+    void testConfirmTransfer_RejectsWhenSourceSessionChangedOrEnded() {
+        sourceTable.setStatus(TableStatus.AVAILABLE); // Bàn nguồn đã bị trả/thanh toán
+
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-4444")
+                .transferType(TransferType.MOVE)
+                .sourceTable(sourceTable)
+                .sourceSessionToken("session-token-old")
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-4444")).thenReturn(Optional.of(transfer));
+
+        TableTransferConfirmRequest request = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-4444")
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.confirmTransfer(request, "device-host"));
+        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
+        assertEquals(TransferStatus.CANCELLED, transfer.getStatus());
+    }
+
+    @Test
+    @DisplayName("EDGE-23: Tính Đẳng cự (Idempotency) - Mobile retry gửi lại mã COMPLETED trả về thành công")
+    void testConfirmTransfer_IdempotentRetryReturnsSuccess() {
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-5555")
+                .transferType(TransferType.MOVE)
+                .sourceTable(sourceTable)
+                .targetTable(targetTable)
+                .targetSessionToken("session-token-b05")
+                .status(TransferStatus.COMPLETED)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-5555")).thenReturn(Optional.of(transfer));
+        when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(targetTable)).thenReturn(Collections.emptyList());
+
+        TableTransferConfirmRequest request = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-5555")
+                .deviceName("Thiết bị khách")
+                .build();
+
+        TableTransferConfirmResponse response = tableTransferService.confirmTransfer(request, "device-host");
+        assertNotNull(response);
+        assertEquals("B05", response.getNewTableNumber());
+        assertEquals("session-token-b05", response.getNewSessionToken());
+    }
 }

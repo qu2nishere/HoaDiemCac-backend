@@ -195,6 +195,34 @@ public class TableTransferServiceImpl implements TableTransferService {
         TableTransfer transfer = tableTransferRepository.findByTransferCode(cleanCode)
                 .orElseThrow(() -> new AppException(ErrorCode.TRANSFER_CODE_INVALID, "Mã chuyển bàn không tồn tại hoặc không hợp lệ"));
 
+        // 0. Tính Đẳng cự (Idempotency): Nếu mã đã COMPLETED và bàn đích trùng khớp (do mạng mobile retry gửi lại request)
+        if (transfer.getStatus() == TransferStatus.COMPLETED && transfer.getTargetTable() != null) {
+            RestaurantTable target = transfer.getTargetTable();
+            String reqTarget = normalizeTableNumber(request.getTargetTableNumber());
+            if (target.getTableNumber().equalsIgnoreCase(reqTarget) || target.getName().equalsIgnoreCase(request.getTargetTableNumber().trim())) {
+                log.info("Request confirmTransfer gửi lại (Idempotent Retry) cho mã {} tại bàn {}", cleanCode, target.getTableNumber());
+                List<DraftCartItemResponse> finalCartItems = getDraftCartItemResponses(target);
+                List<Order> targetOrders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(target);
+                int activeRounds = (int) targetOrders.stream().filter(o -> o.getStatus() != OrderStatus.CANCELLED).count();
+                boolean isHost = tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue(deviceToken)
+                        .map(d -> Boolean.TRUE.equals(d.getIsHost())).orElse(false);
+
+                return TableTransferConfirmResponse.builder()
+                        .newTableId(target.getId())
+                        .newTableNumber(target.getTableNumber())
+                        .newTableName(target.getName())
+                        .newSessionToken(transfer.getTargetSessionToken())
+                        .deviceToken(deviceToken)
+                        .deviceName(request.getDeviceName())
+                        .isHost(isHost)
+                        .cartItemCount(finalCartItems.size())
+                        .cartItems(finalCartItems)
+                        .activeOrderRounds(activeRounds)
+                        .message("Chuyển bàn sang " + target.getTableNumber() + " thành công!")
+                        .build();
+            }
+        }
+
         if (transfer.getStatus() != TransferStatus.PENDING) {
             throw new AppException(ErrorCode.TRANSFER_CODE_INVALID, "Mã chuyển bàn đã được sử dụng hoặc đã bị hủy");
         }
@@ -211,6 +239,15 @@ public class TableTransferServiceImpl implements TableTransferService {
             broadcastTableUpdate(sourceTable);
 
             throw new AppException(ErrorCode.TRANSFER_CODE_EXPIRED, "Mã chuyển bàn đã quá hạn 5 phút. Vui lòng tạo mã mới!");
+        }
+
+        // BẢO VỆ PHIÊN (Stale Session Hijacking Prevention):
+        // Bàn nguồn bắt buộc phải đang OCCUPIED và Session Token phải còn trùng khớp với lúc sinh mã (nếu có)
+        if (sourceTable.getStatus() != TableStatus.OCCUPIED
+                || (transfer.getSourceSessionToken() != null && !Objects.equals(sourceTable.getCurrentSessionToken(), transfer.getSourceSessionToken()))) {
+            transfer.setStatus(TransferStatus.CANCELLED);
+            tableTransferRepository.save(transfer);
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Phiên ăn tại bàn nguồn đã kết thúc hoặc đã thanh toán. Mã chuyển bàn không còn hợp lệ!");
         }
 
         RestaurantTable targetTable = findTableByNumber(request.getTargetTableNumber());
