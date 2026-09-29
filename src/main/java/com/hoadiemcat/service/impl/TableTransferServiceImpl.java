@@ -41,6 +41,7 @@ public class TableTransferServiceImpl implements TableTransferService {
     private final OrderRepository orderRepository;
     private final InvoiceRepository invoiceRepository;
     private final MenuItemRepository menuItemRepository;
+    private final CallStaffLogRepository callStaffLogRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     private static final int TRANSFER_TTL_MINUTES = 5;
@@ -284,6 +285,13 @@ public class TableTransferServiceImpl implements TableTransferService {
             throw new AppException(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, "Bàn đích đang trong quá trình dọn dẹp, chưa sẵn sàng để tiếp nhận khách!");
         }
 
+        // Kiểm tra bàn nguồn có đang trong tiến trình thanh toán không
+        boolean hasPendingInvoiceSource = invoiceRepository.findByRestaurantTableId(sourceTable.getId()).stream()
+                .anyMatch(inv -> inv.getPaymentStatus() == PaymentStatus.PENDING);
+        if (hasPendingInvoiceSource) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn nguồn đang trong quy trình thanh toán hóa đơn, không thể chuyển hoặc ghép bàn!");
+        }
+
         // Kiểm tra bàn đích có đang trong tiến trình thanh toán không
         boolean hasPendingInvoiceTarget = invoiceRepository.findByRestaurantTableId(targetTable.getId()).stream()
                 .anyMatch(inv -> inv.getPaymentStatus() == PaymentStatus.PENDING);
@@ -299,16 +307,23 @@ public class TableTransferServiceImpl implements TableTransferService {
         }
         String newSessionToken = targetTable.getCurrentSessionToken();
 
-        // Kiểm tra bảo mật khi GHÉP BÀN (MERGE): Bắt buộc nhập đúng mã PIN bàn đích để chống đổ nợ hóa đơn sang người lạ
+        // Kiểm tra bảo mật khi GHÉP BÀN (MERGE): Bắt buộc nhập đúng mã PIN bàn đích để chống đổ nợ hóa đơn sang người lạ kèm cơ chế chống Brute-force
         boolean isStaff = deviceToken != null && (deviceToken.startsWith("STAFF_") || deviceToken.startsWith("ADMIN_") || "STAFF_DIRECT_TOKEN".equals(deviceToken));
         if (transfer.getTransferType() == TransferType.MERGE && !isStaff) {
+            if (targetTable.isTemporarilyLocked()) {
+                throw new AppException(ErrorCode.TABLE_LOCKED, "Bàn đích đang bị tạm khóa 60 giây do nhập sai mã PIN quá 5 lần. Vui lòng thử lại sau!");
+            }
             String targetPass = targetTable.getCurrentPasscode();
             String inputPass = request.getTargetPasscode();
             if (targetPass != null && !targetPass.isBlank()) {
                 if (inputPass == null || !inputPass.trim().equals(targetPass.trim())) {
+                    targetTable.recordFailedAttempt();
+                    tableRepository.save(targetTable);
                     throw new AppException(ErrorCode.INVALID_REQUEST, "Để ghép vào bàn đang có khách, vui lòng nhập đúng mã PIN 4 số của bàn đích để xác thực!");
                 }
             }
+            targetTable.resetFailedAttempts();
+            tableRepository.save(targetTable);
         }
 
         int activeOrderRounds = 0;
@@ -412,68 +427,98 @@ public class TableTransferServiceImpl implements TableTransferService {
                 }
             }
 
-            // 3. Cập nhật Bàn Đích
+            // 3. Cập nhật Bàn Đích & Nâng trần thiết bị khi ghép bàn (MERGE)
             if (!Boolean.TRUE.equals(targetTable.getIsOrderLocked())) {
                 targetTable.setIsOrderLocked(false);
             }
+            int combinedCap = (targetTable.getCapacity() != null ? targetTable.getCapacity() : 4) +
+                    (sourceTable.getCapacity() != null ? sourceTable.getCapacity() : 4);
+            targetTable.setMaxActiveDevices(Math.max(
+                    targetTable.getMaxActiveDevices() != null ? targetTable.getMaxActiveDevices() : 6,
+                    (int) Math.round(combinedCap * 1.5)
+            ));
             tableRepository.save(targetTable);
         }
 
-        // 4. Di chuyển & đồng bộ danh sách thiết bị từ bàn nguồn sang bàn đích (tránh rơi rụng thiết bị thành viên)
+        // 4. Di chuyển & đồng bộ danh sách thiết bị từ bàn nguồn sang bàn đích (bảo toàn quyền Chủ Bàn của khách)
         String effectiveDeviceToken = (deviceToken != null && !deviceToken.isBlank()) ? deviceToken : UUID.randomUUID().toString();
-        boolean hasHost = tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(targetTable).isPresent();
-        boolean isHost = !hasHost;
-
-        String deviceName = request.getDeviceName();
-        if (deviceName == null || deviceName.isBlank()) {
-            deviceName = isHost ? "Chủ Bàn (Thiết bị chuyển)" : "Thành Viên (" + targetTable.getTableNumber() + ")";
-        }
+        boolean isStaffToken = effectiveDeviceToken.startsWith("STAFF_") || effectiveDeviceToken.startsWith("ADMIN_") || "STAFF_DIRECT_TOKEN".equals(effectiveDeviceToken);
+        boolean targetHasHost = tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(targetTable).isPresent();
+        boolean isHost = !targetHasHost;
 
         List<TableSessionDevice> sourceDevices = tableSessionDeviceRepository.findByTable(sourceTable);
         boolean confirmedDeviceFound = false;
 
-        for (TableSessionDevice d : sourceDevices) {
-            if (Boolean.TRUE.equals(d.getIsActive())) {
-                d.setTable(targetTable);
-                if (d.getDeviceToken().equals(effectiveDeviceToken)) {
-                    d.setIsHost(isHost);
-                    d.setDeviceName(deviceName);
-                    confirmedDeviceFound = true;
-                } else {
-                    // Mọi thành viên khác từ bàn nguồn sang bàn đích luôn có vai trò Thành Viên (Member)
-                    d.setIsHost(false);
-                }
-            }
+        String deviceName = request.getDeviceName();
+        if (deviceName == null || deviceName.isBlank()) {
+            deviceName = (!targetHasHost) ? "Chủ Bàn (Thiết bị chuyển)" : "Thành Viên (" + targetTable.getTableNumber() + ")";
         }
 
-        if (!confirmedDeviceFound) {
-            TableSessionDevice newDevice = TableSessionDevice.builder()
-                    .table(targetTable)
-                    .deviceToken(effectiveDeviceToken)
-                    .deviceName(deviceName)
-                    .deviceFingerprint(request.getDeviceFingerprint())
-                    .isHost(isHost)
-                    .isActive(true)
-                    .connectedAt(LocalDateTime.now())
-                    .build();
-            sourceDevices.add(newDevice);
+        if (isStaffToken) {
+            // Trường hợp Nhân viên / POS điều chuyển: Giữ nguyên Host thật của khách
+            isHost = false; // Token của POS không nhận quyền Host
+            for (TableSessionDevice d : sourceDevices) {
+                if (Boolean.TRUE.equals(d.getIsActive())) {
+                    d.setTable(targetTable);
+                    if (targetHasHost) {
+                        d.setIsHost(false); // Bàn đích đã có Host thì mọi người nhập vào làm Member
+                    }
+                    // Nếu bàn đích chưa có Host thì thiết bị đang là Host ở bàn cũ tiếp tục giữ quyền Host
+                }
+            }
+            confirmedDeviceFound = true;
+        } else {
+            // Trường hợp Khách hàng tự xác nhận tại bàn đích:
+            for (TableSessionDevice d : sourceDevices) {
+                if (Boolean.TRUE.equals(d.getIsActive())) {
+                    d.setTable(targetTable);
+                    if (d.getDeviceToken().equals(effectiveDeviceToken)) {
+                        d.setIsHost(isHost);
+                        d.setDeviceName(deviceName);
+                        confirmedDeviceFound = true;
+                    } else if (targetHasHost) {
+                        d.setIsHost(false);
+                    }
+                }
+            }
+
+            if (!confirmedDeviceFound) {
+                TableSessionDevice newDevice = TableSessionDevice.builder()
+                        .table(targetTable)
+                        .deviceToken(effectiveDeviceToken)
+                        .deviceName(deviceName)
+                        .deviceFingerprint(request.getDeviceFingerprint())
+                        .isHost(isHost)
+                        .isActive(true)
+                        .connectedAt(LocalDateTime.now())
+                        .build();
+                sourceDevices.add(newDevice);
+            }
         }
 
         tableSessionDeviceRepository.saveAll(sourceDevices);
 
-        // 5. Giải phóng Bàn Nguồn về trạng thái AVAILABLE
+        // 5. Chuyển tiếp các chuông gọi phục vụ / yêu cầu thanh toán PENDING sang bàn đích
+        List<CallStaffLog> pendingLogs = callStaffLogRepository.findByRestaurantTableAndStatus(sourceTable, CallStaffStatus.PENDING);
+        if (pendingLogs != null && !pendingLogs.isEmpty()) {
+            for (CallStaffLog logItem : pendingLogs) {
+                logItem.setRestaurantTable(targetTable);
+                String oldMsg = logItem.getMessage() != null ? logItem.getMessage() + " " : "";
+                logItem.setMessage(oldMsg + "[Chuyển từ " + sourceTable.getTableNumber() + "]");
+            }
+            callStaffLogRepository.saveAll(pendingLogs);
+        }
+
+        // 6. Giải phóng Bàn Nguồn về trạng thái AVAILABLE
         resetSourceTableSession(sourceTable);
 
-        // 6. Cập nhật lại số lượng thiết bị hoạt động thực tế tại bàn đích
+        // 7. Cập nhật lại số lượng thiết bị hoạt động thực tế tại bàn đích
         int totalActiveDevices = (int) tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(targetTable).size();
         targetTable.setActiveDeviceCount(totalActiveDevices);
         tableRepository.save(targetTable);
 
-        // 7. Hoàn tất giao dịch TableTransfer
+        // 8. Hoàn tất giao dịch TableTransfer (xóa lệnh trùng lặp)
         transfer.setStatus(TransferStatus.COMPLETED);
-        transfer.setTargetTable(targetTable);
-        transfer.setTargetSessionToken(newSessionToken);
-        tableTransferRepository.save(transfer);
         transfer.setTargetTable(targetTable);
         transfer.setTargetSessionToken(newSessionToken);
         tableTransferRepository.save(transfer);
@@ -719,20 +764,53 @@ public class TableTransferServiceImpl implements TableTransferService {
 
     @Override
     @Transactional
-    public TableClusterResponse unlinkTableFromCluster(Long slaveTableId, String username) {
-        RestaurantTable slave = tableRepository.findById(slaveTableId)
-                .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "id", slaveTableId));
+    public TableClusterResponse unlinkTableFromCluster(Long tableId, String username) {
+        RestaurantTable target = tableRepository.findById(tableId)
+                .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "id", tableId));
 
-        if (!slave.isLinked()) {
-            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn " + slave.getTableNumber() + " không nằm trong cụm bàn liên kết nào");
+        // Trường hợp 1: Nếu truyền vào Bàn chính (Master Table) -> Giải tán toàn bộ Cụm bàn (Disband Cluster)
+        if (target.isMaster()) {
+            List<RestaurantTable> slaves = tableRepository.findByMasterTable(target);
+            List<String> unlinkedNumbers = new ArrayList<>();
+            for (RestaurantTable s : slaves) {
+                s.setMasterTable(null);
+                resetSourceTableSession(s);
+                s.setStatus(TableStatus.CLEANING); // Tuân thủ nghiêm ngặt QĐ7
+                tableRepository.save(s);
+                broadcastTableUpdate(s);
+                unlinkedNumbers.add(s.getTableNumber());
+            }
+
+            int baseCap = target.getCapacity() != null ? target.getCapacity() : 4;
+            target.setMaxActiveDevices((int) Math.round(baseCap * 1.5));
+            tableRepository.save(target);
+            broadcastTableUpdate(target);
+
+            log.info("Nhân viên {} đã giải tán toàn bộ Cụm bàn {} (các bàn phụ: {})", username, target.getTableNumber(), unlinkedNumbers);
+
+            return TableClusterResponse.builder()
+                    .masterTableId(target.getId())
+                    .masterTableNumber(target.getTableNumber())
+                    .masterTableName(target.getName())
+                    .linkedTableNumbers(Collections.emptyList())
+                    .totalCapacity(baseCap)
+                    .message("Đã giải tán Cụm bàn " + target.getTableNumber() + " thành công! Toàn bộ bàn phụ đã chuyển sang trạng thái Chờ Dọn Dẹp.")
+                    .build();
         }
 
+        // Trường hợp 2: Tách 1 bàn phụ ra khỏi Cụm bàn
+        if (!target.isLinked()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn " + target.getTableNumber() + " không nằm trong cụm bàn liên kết nào");
+        }
+
+        RestaurantTable slave = target;
         RestaurantTable master = slave.getMasterTable();
         slave.setMasterTable(null);
         resetSourceTableSession(slave);
+        slave.setStatus(TableStatus.CLEANING); // Tuân thủ nghiêm ngặt QĐ7: Chờ dọn dẹp trước khi đón khách mới
+        tableRepository.save(slave);
 
         broadcastTableUpdate(slave);
-        broadcastTableUpdate(master);
 
         log.info("Nhân viên {} đã tách bàn phụ {} ra khỏi Cụm bàn {}", username, slave.getTableNumber(), master.getTableNumber());
 
@@ -746,6 +824,7 @@ public class TableTransferServiceImpl implements TableTransferService {
 
         master.setMaxActiveDevices((int) Math.round(totalCap * 1.5));
         tableRepository.save(master);
+        broadcastTableUpdate(master);
 
         return TableClusterResponse.builder()
                 .masterTableId(master.getId())
@@ -753,7 +832,7 @@ public class TableTransferServiceImpl implements TableTransferService {
                 .masterTableName(master.getName())
                 .linkedTableNumbers(remainingSlaves)
                 .totalCapacity(totalCap)
-                .message("Đã tách bàn " + slave.getTableNumber() + " ra khỏi cụm bàn " + master.getTableNumber() + " thành công!")
+                .message("Đã tách bàn " + slave.getTableNumber() + " ra khỏi cụm bàn " + master.getTableNumber() + " thành công! Bàn " + slave.getTableNumber() + " đang ở trạng thái Chờ Dọn Dẹp.")
                 .build();
     }
 
