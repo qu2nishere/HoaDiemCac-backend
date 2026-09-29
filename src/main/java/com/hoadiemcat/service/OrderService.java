@@ -27,4 +27,6 @@ public interface OrderService {
     OrderResponse deliverAllOrderItems(Long orderId);
 
     java.util.Map<String, Object> reportOutOfStock(Long orderItemId, Long menuItemId, String reason);
+
+    java.util.Map<String, Object> restockMenuItem(Long menuItemId);
 }

@@ -67,4 +67,15 @@ public class KitchenController {
         Map<String, Object> result = orderService.reportOutOfStock(orderItemId, menuItemId, reason);
         return ResponseEntity.ok(ApiResponse.success("Báo hết món thành công", result));
     }
+
+    @PostMapping("/restock")
+    @Operation(summary = "Mở bán lại món ăn từ Bếp KDS (UC19)",
+               description = "Mở lại trạng thái phục vụ món ăn trên thực đơn khách hàng và phát realtime")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> restockMenuItem(
+            @RequestBody Map<String, Object> body
+    ) {
+        Long menuItemId = body.get("menuItemId") != null ? Long.valueOf(body.get("menuItemId").toString()) : null;
+        Map<String, Object> result = orderService.restockMenuItem(menuItemId);
+        return ResponseEntity.ok(ApiResponse.success("Mở bán lại món thành công", result));
+    }
 }

@@ -492,4 +492,40 @@ public class OrderServiceImpl implements OrderService {
                 "message", politeMessage
         );
     }
+
+    @Override
+    @Transactional
+    public Map<String, Object> restockMenuItem(Long menuItemId) {
+        if (menuItemId == null) {
+            throw new ResourceNotFoundException("MenuItem", "id", null);
+        }
+
+        MenuItem menuItem = menuItemRepository.findById(menuItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", menuItemId));
+
+        menuItem.setIsAvailable(true);
+        menuItemRepository.save(menuItem);
+        log.info("Bếp đã mở bán lại món ăn: {} (ID: {})", menuItem.getName(), menuItem.getId());
+
+        try {
+            Map<String, Object> event = Map.of(
+                    "type", "MENU_ITEM_RESTOCKED",
+                    "menuItemId", menuItem.getId(),
+                    "menuItemCode", menuItem.getCode(),
+                    "name", menuItem.getName(),
+                    "isAvailable", true,
+                    "message", "Món ăn '" + menuItem.getName() + "' đã mở bán trở lại"
+            );
+            messagingTemplate.convertAndSend("/topic/menu-items", event);
+        } catch (Exception e) {
+            log.warn("Lỗi khi bắn WebSocket mở bán lại món: {}", e.getMessage());
+        }
+
+        return Map.of(
+                "success", true,
+                "menuItemId", menuItem.getId(),
+                "name", menuItem.getName(),
+                "isAvailable", true
+        );
+    }
 }
