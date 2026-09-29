@@ -53,4 +53,18 @@ public class KitchenController {
         OrderResponse response = orderService.updateOrderStatus(orderId, status);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái đợt gọi thành công", response));
     }
+
+    @PostMapping("/out-of-stock")
+    @Operation(summary = "Báo hết món khẩn cấp từ Bếp KDS (UC19)",
+               description = "Khóa món trên thực đơn (SOLD OUT), tự động gỡ món khỏi tất cả bàn đang đặt và bắn thông báo thời gian thực")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> reportOutOfStock(
+            @RequestBody Map<String, Object> body
+    ) {
+        Long orderItemId = body.get("orderItemId") != null ? Long.valueOf(body.get("orderItemId").toString()) : null;
+        Long menuItemId = body.get("menuItemId") != null ? Long.valueOf(body.get("menuItemId").toString()) : null;
+        String reason = body.get("reason") != null ? body.get("reason").toString() : "Hết nguyên liệu";
+
+        Map<String, Object> result = orderService.reportOutOfStock(orderItemId, menuItemId, reason);
+        return ResponseEntity.ok(ApiResponse.success("Báo hết món thành công", result));
+    }
 }

@@ -25,8 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -360,5 +362,134 @@ public class OrderServiceImpl implements OrderService {
                 .servedAt(item.getServedAt())
                 .deliveredAt(item.getDeliveredAt())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> reportOutOfStock(Long orderItemId, Long menuItemId, String reason) {
+        MenuItem menuItem = null;
+        if (orderItemId != null) {
+            OrderItem oi = orderItemRepository.findById(orderItemId).orElse(null);
+            if (oi != null && oi.getMenuItem() != null) {
+                menuItem = oi.getMenuItem();
+            }
+        }
+        if (menuItem == null && menuItemId != null) {
+            menuItem = menuItemRepository.findById(menuItemId).orElse(null);
+        }
+        if (menuItem == null) {
+            throw new ResourceNotFoundException("MenuItem", "id", menuItemId != null ? menuItemId : orderItemId);
+        }
+
+        // 1. Cập nhật MenuItem: isAvailable = false
+        menuItem.setIsAvailable(false);
+        menuItemRepository.save(menuItem);
+        log.info("Bếp đã báo hết món: {} (ID: {})", menuItem.getName(), menuItem.getId());
+
+        // 2. Tìm tất cả Order đang hoạt động (PENDING, COOKING)
+        List<Order> activeOrders = orderRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(OrderStatus.PENDING, OrderStatus.COOKING)
+        );
+
+        Long targetMenuId = menuItem.getId();
+        Set<RestaurantTable> affectedTables = new HashSet<>();
+        int removedCount = 0;
+
+        for (Order order : activeOrders) {
+            // Chỉ xóa các món ĐANG HOẠT ĐỘNG (COOKING: Đang chế biến, SERVED: Chờ bưng)
+            // TUYỆT ĐỐI KHÔNG XÓA món đã phục vụ lên bàn (DELIVERED) hoặc đã hủy trước đó (CANCELLED)
+            List<OrderItem> toRemove = order.getOrderItems().stream()
+                    .filter(item -> item.getMenuItem() != null
+                            && item.getMenuItem().getId().equals(targetMenuId)
+                            && (item.getStatus() == OrderItemStatus.COOKING || item.getStatus() == OrderItemStatus.SERVED))
+                    .collect(Collectors.toList());
+
+            if (!toRemove.isEmpty()) {
+                if (order.getRestaurantTable() != null) {
+                    affectedTables.add(order.getRestaurantTable());
+                }
+                for (OrderItem item : toRemove) {
+                    order.removeOrderItem(item);
+                    removedCount++;
+                }
+
+                if (order.getOrderItems().isEmpty()) {
+                    orderRepository.delete(order);
+                } else {
+                    BigDecimal newTotal = order.getOrderItems().stream()
+                            .map(OrderItem::getTotalPrice)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    order.setTotalAmount(newTotal);
+
+                    // Kiểm tra xem tất cả các món còn lại có phải đã xong không
+                    boolean allDone = order.getOrderItems().stream()
+                            .allMatch(i -> i.getStatus() == OrderItemStatus.SERVED || i.getStatus() == OrderItemStatus.DELIVERED);
+                    if (allDone && !order.getOrderItems().isEmpty()) {
+                        order.setStatus(OrderStatus.COMPLETED);
+                    }
+                    orderRepository.save(order);
+                }
+            }
+        }
+
+        // 3. Chuẩn bị message cáo lỗi lịch sự
+        String politeMessage = "Kính thưa Quý khách, Nhà hàng Hỏa Diệm Các thành thật cáo lỗi: Món \""
+                + menuItem.getName()
+                + "\" hiện tại bếp đã tạm hết nguyên liệu tươi ngon nhất. Món ăn này đã được tự động gỡ khỏi đơn gọi của bàn để Quý khách không phải chờ đợi. Kính mong Quý khách lượng thứ và hoan hỷ lựa chọn món thơm ngon khác trong thực đơn!";
+
+        // 4. Bắn WebSocket STOMP
+        try {
+            // A. Thông báo cập nhật trạng thái thực đơn tới tất cả client (hiện watermark SOLD OUT)
+            Map<String, Object> menuUpdateEvent = Map.of(
+                    "type", "MENU_ITEM_OUT_OF_STOCK",
+                    "menuItemId", menuItem.getId(),
+                    "menuItemCode", menuItem.getCode(),
+                    "name", menuItem.getName(),
+                    "isAvailable", false,
+                    "politeMessage", politeMessage
+            );
+            messagingTemplate.convertAndSend("/topic/menu-items", menuUpdateEvent);
+
+            // B. Thông báo tới Bếp KDS & Phục vụ (cập nhật lại hàng đợi)
+            List<OrderResponse> updatedQueue = getKitchenQueue();
+            Map<String, Object> kitchenEvent = Map.of(
+                    "type", "KITCHEN_ITEM_OUT_OF_STOCK",
+                    "menuItemId", menuItem.getId(),
+                    "menuItemName", menuItem.getName(),
+                    "removedCount", removedCount,
+                    "queue", updatedQueue
+            );
+            messagingTemplate.convertAndSend("/topic/kitchen/orders", kitchenEvent);
+            messagingTemplate.convertAndSend("/topic/waiter/orders", kitchenEvent);
+
+            // C. Thông báo trực tiếp tới các bàn bị ảnh hưởng
+            for (RestaurantTable table : affectedTables) {
+                Map<String, Object> tableNotice = Map.of(
+                        "type", "ITEM_OUT_OF_STOCK_CANCELLED",
+                        "menuItemId", menuItem.getId(),
+                        "menuItemName", menuItem.getName(),
+                        "message", politeMessage,
+                        "tableCode", table.getTableNumber() != null ? table.getTableNumber() : "",
+                        "tableName", table.getName() != null ? table.getName() : ""
+                );
+                if (table.getTableNumber() != null) {
+                    messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/status", tableNotice);
+                }
+                if (table.getName() != null && !table.getName().equals(table.getTableNumber())) {
+                    messagingTemplate.convertAndSend("/topic/table/" + table.getName() + "/status", tableNotice);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi khi bắn WebSocket thông báo hết món: {}", e.getMessage());
+        }
+
+        return Map.of(
+                "success", true,
+                "menuItemId", menuItem.getId(),
+                "menuItemName", menuItem.getName(),
+                "removedItemsCount", removedCount,
+                "affectedTablesCount", affectedTables.size(),
+                "message", politeMessage
+        );
     }
 }
