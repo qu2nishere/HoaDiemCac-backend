@@ -12,8 +12,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import com.hoadiemcat.dto.request.TableDirectTransferRequest;
+import com.hoadiemcat.dto.response.TableTransferConfirmResponse;
+import com.hoadiemcat.service.TableTransferService;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -23,6 +27,7 @@ import java.util.List;
 public class TableQrAdminController {
 
     private final TableQrService tableQrService;
+    private final TableTransferService tableTransferService;
 
     @GetMapping
     @Operation(summary = "Lấy danh sách tất cả bàn ăn kèm QR và mã PIN hiện tại")
@@ -114,5 +119,17 @@ public class TableQrAdminController {
     ) {
         tableQrService.resolveCallStaff(id, type);
         return ResponseEntity.ok(ApiResponse.success("Đã xử lý thông báo của bàn", null));
+    }
+
+    @PostMapping("/direct-transfer")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'WAITER')")
+    @Operation(summary = "Nhân viên / Quản lý thực hiện Chuyển hoặc Ghép bàn trực tiếp từ POS")
+    public ResponseEntity<ApiResponse<TableTransferConfirmResponse>> directTransfer(
+            @Valid @RequestBody TableDirectTransferRequest request,
+            Principal principal
+    ) {
+        String username = principal != null ? principal.getName() : "ADMIN";
+        TableTransferConfirmResponse response = tableTransferService.directTransfer(request, username);
+        return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
     }
 }
