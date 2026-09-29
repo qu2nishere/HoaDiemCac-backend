@@ -36,6 +36,21 @@ class TableQrServiceTest {
     @Mock
     private TableSessionDeviceRepository tableSessionDeviceRepository;
 
+    @Mock
+    private com.hoadiemcat.repository.OrderRepository orderRepository;
+
+    @Mock
+    private com.hoadiemcat.repository.OrderItemRepository orderItemRepository;
+
+    @Mock
+    private com.hoadiemcat.repository.CartRepository cartRepository;
+
+    @Mock
+    private com.hoadiemcat.repository.CallStaffLogRepository callStaffLogRepository;
+
+    @Mock
+    private org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
     @InjectMocks
     private TableQrServiceImpl tableQrService;
 
@@ -264,5 +279,37 @@ class TableQrServiceTest {
         assertEquals(0, mockTable.getActiveDeviceCount());
         assertNull(mockTable.getSessionStartedAt());
         verify(tableRepository, times(1)).save(mockTable);
+    }
+
+    @Test
+    @DisplayName("Khi trạng thái bàn trở về AVAILABLE: Toàn bộ order và order-item được dọn sạch")
+    void testUpdateTableStatusToAvailableCleansOrdersAndLogs() {
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(mockTable));
+        when(tableRepository.save(any(RestaurantTable.class))).thenReturn(mockTable);
+
+        com.hoadiemcat.entity.Order mockOrder = com.hoadiemcat.entity.Order.builder()
+                .restaurantTable(mockTable)
+                .sessionToken("old-token")
+                .roundNumber(1)
+                .build();
+        mockOrder.setId(10L);
+
+        com.hoadiemcat.entity.OrderItem mockItem = com.hoadiemcat.entity.OrderItem.builder()
+                .order(mockOrder)
+                .price(new java.math.BigDecimal("150000"))
+                .quantity(2)
+                .totalPrice(new java.math.BigDecimal("300000"))
+                .build();
+        mockItem.setId(100L);
+        mockOrder.addOrderItem(mockItem);
+
+        when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(mockTable)).thenReturn(List.of(mockOrder));
+
+        tableQrService.updateTableStatus(1L, TableStatus.AVAILABLE);
+
+        assertEquals(TableStatus.AVAILABLE, mockTable.getStatus());
+        verify(orderItemRepository, times(1)).deleteAll(any());
+        verify(orderRepository, times(1)).deleteAll(any());
+        verify(cartRepository, times(1)).deleteByRestaurantTable(mockTable);
     }
 }
