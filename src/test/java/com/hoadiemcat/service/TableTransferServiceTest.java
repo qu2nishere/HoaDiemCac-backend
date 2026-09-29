@@ -2,6 +2,7 @@ package com.hoadiemcat.service;
 
 import com.hoadiemcat.dto.request.DraftCartItemRequest;
 import com.hoadiemcat.dto.request.TableClusterLinkRequest;
+import com.hoadiemcat.dto.request.TableDirectTransferRequest;
 import com.hoadiemcat.dto.request.TableTransferConfirmRequest;
 import com.hoadiemcat.dto.request.TableTransferRequest;
 import com.hoadiemcat.dto.response.DraftCartItemResponse;
@@ -58,6 +59,9 @@ class TableTransferServiceTest {
 
     @Mock
     private MenuItemRepository menuItemRepository;
+
+    @Mock
+    private CallStaffLogRepository callStaffLogRepository;
 
     @Mock
     private SimpMessagingTemplate messagingTemplate;
@@ -488,7 +492,7 @@ class TableTransferServiceTest {
 
         assertNotNull(response);
         assertNull(slaveTable.getMasterTable());
-        assertEquals(TableStatus.AVAILABLE, slaveTable.getStatus());
+        assertEquals(TableStatus.CLEANING, slaveTable.getStatus(), "Bàn sau khi tách phải chuyển sang CLEANING để dọn dẹp theo QĐ7");
         assertEquals(6, targetTable.getMaxActiveDevices(), "Trần thiết bị của bàn chính phải giảm về 6 khi cụm chỉ còn lại 1 bàn");
         verify(tableRepository, atLeastOnce()).save(slaveTable);
     }
@@ -786,5 +790,191 @@ class TableTransferServiceTest {
         AppException ex = assertThrows(AppException.class, () ->
                 tableTransferService.cancelTransfer("TRF-7777", "token-member"));
         assertEquals(ErrorCode.HOST_PERMISSION_REQUIRED, ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("TC-TRF-13: Bảo vệ Brute-force mã PIN khi Ghép bàn (Chống gian lận dồn bill & Khóa bàn sau 5 lần sai)")
+    void testConfirmTransfer_Merge_BruteForceProtection() {
+        targetTable.setStatus(TableStatus.OCCUPIED);
+        targetTable.setCurrentPasscode("8888");
+        targetTable.setFailedAttempts(4); // Đã sai 4 lần trước đó
+
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-9991")
+                .transferType(TransferType.MERGE)
+                .sourceTable(sourceTable)
+                .sourceSessionToken("session-token-b01")
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-9991")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+
+        TableTransferConfirmRequest wrongReq = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-9991")
+                .targetPasscode("0000") // Mã sai lần thứ 5
+                .build();
+
+        // Lần 5 sai: Bàn bị tạm khóa 60 giây
+        assertThrows(AppException.class, () -> tableTransferService.confirmTransfer(wrongReq, "cust-device"));
+        assertEquals(5, targetTable.getFailedAttempts());
+        assertTrue(targetTable.isTemporarilyLocked(), "Bàn đích phải bị tạm khóa 60 giây sau 5 lần nhập sai mã PIN ghép bàn");
+
+        // Lần 6 thử lại: Bị từ chối ngay lập tức do TABLE_LOCKED
+        AppException lockedEx = assertThrows(AppException.class, () -> tableTransferService.confirmTransfer(wrongReq, "cust-device"));
+        assertEquals(ErrorCode.TABLE_LOCKED, lockedEx.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("TC-TRF-14: Nhân viên thực hiện POS Direct Transfer bảo toàn quyền Chủ Bàn cho khách hàng")
+    void testDirectTransfer_PreservesCustomerHostRole() {
+        TableSessionDevice hostDevice = TableSessionDevice.builder()
+                .table(sourceTable)
+                .deviceToken("token-cust-host")
+                .deviceName("Chủ Bàn Thật Của Khách")
+                .isHost(true)
+                .isActive(true)
+                .build();
+
+        List<TableSessionDevice> sourceDevices = new ArrayList<>(List.of(hostDevice));
+
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(sourceTable));
+        when(tableRepository.findById(5L)).thenReturn(Optional.of(targetTable));
+        when(tableTransferRepository.save(any(TableTransfer.class))).thenAnswer(i -> i.getArgument(0));
+        when(tableTransferRepository.findByTransferCode(anyString())).thenAnswer(i -> {
+            return Optional.of(TableTransfer.builder()
+                    .transferCode(i.getArgument(0))
+                    .transferType(TransferType.MOVE)
+                    .sourceTable(sourceTable)
+                    .sourceSessionToken("session-token-b01")
+                    .status(TransferStatus.PENDING)
+                    .expiresAt(LocalDateTime.now().plusMinutes(5))
+                    .build());
+        });
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+        when(tableSessionDeviceRepository.findByTable(sourceTable)).thenReturn(sourceDevices, Collections.emptyList());
+        when(tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(targetTable)).thenReturn(sourceDevices);
+
+        TableDirectTransferRequest directReq = TableDirectTransferRequest.builder()
+                .sourceTableId(1L)
+                .targetTableId(5L)
+                .transferType(TransferType.MOVE)
+                .reason("Nhân viên chuyển bàn trên POS")
+                .build();
+
+        TableTransferConfirmResponse response = tableTransferService.directTransfer(directReq, "pos_staff");
+
+        assertNotNull(response);
+        assertEquals("B05", response.getNewTableNumber());
+        assertTrue(hostDevice.getIsHost(), "Khách hàng vẫn phải giữ vai trò Chủ Bàn (Host) sau khi nhân viên chuyển từ POS!");
+    }
+
+    @Test
+    @DisplayName("TC-TRF-15: Giải tán toàn bộ Cụm bàn tiệc khi truyền vào ID của Bàn chính (Master Table)")
+    void testUnlinkTableFromCluster_DisbandsEntireClusterWhenGivenMasterId() {
+        RestaurantTable master = RestaurantTable.builder()
+                .tableNumber("B05")
+                .name("Bàn 05 (Chính)")
+                .status(TableStatus.OCCUPIED)
+                .capacity(4)
+                .build();
+        master.setId(5L);
+
+        RestaurantTable slave1 = RestaurantTable.builder()
+                .tableNumber("B06")
+                .name("Bàn 06")
+                .status(TableStatus.OCCUPIED)
+                .capacity(4)
+                .masterTable(master)
+                .build();
+        slave1.setId(6L);
+
+        RestaurantTable slave2 = RestaurantTable.builder()
+                .tableNumber("B07")
+                .name("Bàn 07")
+                .status(TableStatus.OCCUPIED)
+                .capacity(4)
+                .masterTable(master)
+                .build();
+        slave2.setId(7L);
+
+        master.getLinkedTables().addAll(List.of(slave1, slave2));
+
+        when(tableRepository.findById(5L)).thenReturn(Optional.of(master));
+        when(tableRepository.findByMasterTable(master)).thenReturn(List.of(slave1, slave2));
+
+        TableClusterResponse response = tableTransferService.unlinkTableFromCluster(5L, "manager01");
+
+        assertNotNull(response);
+        assertEquals(5L, response.getMasterTableId());
+        assertTrue(response.getLinkedTableNumbers().isEmpty(), "Toàn bộ bàn phụ phải được gỡ bỏ khỏi cụm");
+        assertEquals(TableStatus.CLEANING, slave1.getStatus(), "Bàn phụ 1 phải chuyển sang CLEANING để dọn dẹp");
+        assertEquals(TableStatus.CLEANING, slave2.getStatus(), "Bàn phụ 2 phải chuyển sang CLEANING để dọn dẹp");
+        assertNull(slave1.getMasterTable());
+        assertNull(slave2.getMasterTable());
+    }
+
+    @Test
+    @DisplayName("TC-TRF-16: Tự động nâng trần thiết bị maxActiveDevices của bàn đích khi Ghép bàn (MERGE)")
+    void testConfirmTransfer_Merge_ExpandsTargetMaxActiveDevices() {
+        sourceTable.setCapacity(4);
+        targetTable.setStatus(TableStatus.OCCUPIED);
+        targetTable.setCapacity(6);
+        targetTable.setMaxActiveDevices(9); // Mặc định 6 * 1.5 = 9
+
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-3331")
+                .transferType(TransferType.MERGE)
+                .sourceTable(sourceTable)
+                .sourceSessionToken("session-token-b01")
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-3331")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+
+        TableTransferConfirmRequest req = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-3331")
+                .targetPasscode("5555")
+                .build();
+
+        tableTransferService.confirmTransfer(req, "STAFF_POS");
+
+        // Tổng capacity 4 + 6 = 10 -> maxActiveDevices phải được nâng lên 10 * 1.5 = 15
+        assertEquals(15, targetTable.getMaxActiveDevices(), "Trần thiết bị bàn đích phải được nâng lên 15 để chứa đủ khách cả 2 bàn");
+    }
+
+    @Test
+    @DisplayName("TC-TRF-17: Từ chối xác nhận chuyển bàn khi bàn nguồn đang có hóa đơn PENDING chờ thanh toán")
+    void testConfirmTransfer_RejectsWhenSourceHasPendingInvoice() {
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-9998")
+                .transferType(TransferType.MOVE)
+                .sourceTable(sourceTable)
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        Invoice pendingInvoice = Invoice.builder()
+                .restaurantTable(sourceTable)
+                .paymentStatus(PaymentStatus.PENDING)
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-9998")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+        when(invoiceRepository.findByRestaurantTableId(1L)).thenReturn(List.of(pendingInvoice));
+
+        TableTransferConfirmRequest req = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-9998")
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () -> tableTransferService.confirmTransfer(req, "dev-1"));
+        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
+        assertTrue(ex.getMessage().contains("Bàn nguồn đang trong quy trình thanh toán"));
     }
 }
