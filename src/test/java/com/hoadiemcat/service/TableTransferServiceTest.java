@@ -480,7 +480,7 @@ class TableTransferServiceTest {
         slaveTable.setId(6L);
 
         when(tableRepository.findById(6L)).thenReturn(Optional.of(slaveTable));
-        when(tableRepository.findByMasterTable(targetTable)).thenReturn(Collections.emptyList());
+        lenient().when(tableRepository.findByMasterTable(any())).thenReturn(Collections.emptyList());
 
         TableClusterResponse response = tableTransferService.unlinkTableFromCluster(6L, "staff01");
 
@@ -488,5 +488,129 @@ class TableTransferServiceTest {
         assertNull(slaveTable.getMasterTable());
         assertEquals(TableStatus.AVAILABLE, slaveTable.getStatus());
         verify(tableRepository, atLeastOnce()).save(slaveTable);
+    }
+
+    @Test
+    @DisplayName("BUG-03: Từ chối Chuyển/Ghép bàn khi bàn đích đang dọn dẹp (CLEANING)")
+    void testConfirmTransfer_RejectsWhenTargetIsCleaning() {
+        targetTable.setStatus(TableStatus.CLEANING);
+
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-1111")
+                .transferType(TransferType.MOVE)
+                .sourceTable(sourceTable)
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-1111")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+
+        TableTransferConfirmRequest request = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-1111")
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.confirmTransfer(request, "device-host"));
+        assertEquals(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("BUG-03: Từ chối Ghép bàn khi bàn đích không có khách ngồi (chưa OCCUPIED)")
+    void testConfirmTransfer_Merge_RejectsWhenTargetIsNotOccupied() {
+        targetTable.setStatus(TableStatus.AVAILABLE);
+
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-2222")
+                .transferType(TransferType.MERGE)
+                .sourceTable(sourceTable)
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-2222")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+
+        TableTransferConfirmRequest request = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-2222")
+                .targetPasscode("5555")
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.confirmTransfer(request, "device-host"));
+        assertEquals(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("BUG-02: Bảo toàn các thiết bị thành viên (Members) từ bàn cũ sang bàn mới khi chuyển bàn")
+    void testConfirmTransfer_MigratesActiveMembersToTarget() {
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-3333")
+                .transferType(TransferType.MOVE)
+                .sourceTable(sourceTable)
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        TableSessionDevice hostDevice = TableSessionDevice.builder()
+                .table(sourceTable)
+                .deviceToken("token-host")
+                .deviceName("Chủ Bàn")
+                .isHost(true)
+                .isActive(true)
+                .build();
+
+        TableSessionDevice memberDevice = TableSessionDevice.builder()
+                .table(sourceTable)
+                .deviceToken("token-member")
+                .deviceName("Bạn A")
+                .isHost(false)
+                .isActive(true)
+                .build();
+
+        List<TableSessionDevice> sourceDevices = new ArrayList<>(List.of(hostDevice, memberDevice));
+
+        when(tableTransferRepository.findByTransferCode("TRF-3333")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+        when(tableSessionDeviceRepository.findByTable(sourceTable)).thenReturn(sourceDevices, Collections.emptyList());
+        when(tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(targetTable))
+                .thenReturn(sourceDevices);
+
+        TableTransferConfirmRequest request = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B05")
+                .transferCode("TRF-3333")
+                .build();
+
+        TableTransferConfirmResponse response = tableTransferService.confirmTransfer(request, "token-host");
+
+        assertNotNull(response);
+        assertEquals(targetTable, memberDevice.getTable(), "Thiết bị thành viên phải được chuyển quyền sở hữu sang bàn đích");
+        assertTrue(memberDevice.getIsActive(), "Thiết bị thành viên phải tiếp tục hoạt động tại bàn mới");
+        assertFalse(memberDevice.getIsHost(), "Thành viên chuyển sang phải giữ vai trò Thành Viên (Member)");
+        assertEquals(2, targetTable.getActiveDeviceCount(), "Số lượng thiết bị kích hoạt tại bàn đích phải là 2");
+    }
+
+    @Test
+    @DisplayName("Từ chối tạo Cụm bàn khi Bàn phụ đã là bàn chính hoặc đang nằm trong cụm khác")
+    void testLinkTablesToCluster_RejectsWhenSlaveIsAlreadyMasterOrLinked() {
+        RestaurantTable slaveMaster = RestaurantTable.builder()
+                .tableNumber("B06")
+                .linkedTables(List.of(new RestaurantTable()))
+                .build();
+        slaveMaster.setId(6L);
+
+        when(tableRepository.findById(5L)).thenReturn(Optional.of(targetTable));
+        when(tableRepository.findById(6L)).thenReturn(Optional.of(slaveMaster));
+
+        TableClusterLinkRequest request = TableClusterLinkRequest.builder()
+                .masterTableId(5L)
+                .slaveTableIds(List.of(6L))
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.linkTablesToCluster(request, "staff01"));
+        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
     }
 }

@@ -265,4 +265,29 @@ class TableQrServiceTest {
         assertNull(mockTable.getSessionStartedAt());
         verify(tableRepository, times(1)).save(mockTable);
     }
+
+    @Test
+    @DisplayName("BUG-01: Giải phóng Cụm bàn tiệc khi thanh toán - Tự động giải phóng toàn bộ bàn phụ (Slaves)")
+    void testReleaseTableSession_ClusterMaster_FreesAllSlaveTables() {
+        RestaurantTable slaveTable = RestaurantTable.builder()
+                .tableNumber("B02")
+                .name("Bàn 02")
+                .status(TableStatus.OCCUPIED)
+                .capacity(4)
+                .masterTable(mockTable)
+                .currentSessionToken("session-token-1")
+                .build();
+        slaveTable.setId(2L);
+
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(mockTable));
+        when(tableRepository.findByMasterTable(mockTable)).thenReturn(List.of(slaveTable));
+        when(tableRepository.save(any(RestaurantTable.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        tableQrService.releaseTableSession(1L);
+
+        assertNull(slaveTable.getMasterTable(), "Bàn phụ phải được gỡ bỏ liên kết masterTable");
+        assertEquals(TableStatus.AVAILABLE, slaveTable.getStatus(), "Bàn phụ phải chuyển về AVAILABLE để đón khách mới");
+        verify(tableRepository, atLeastOnce()).save(slaveTable);
+        verify(tableRepository, atLeastOnce()).save(mockTable);
+    }
 }

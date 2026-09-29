@@ -27,6 +27,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -219,6 +220,18 @@ public class TableTransferServiceImpl implements TableTransferService {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Không thể chuyển hoặc ghép vào chính bàn hiện tại");
         }
 
+        // Không thể chuyển hoặc ghép vào bàn đang dọn dẹp (CLEANING)
+        if (targetTable.getStatus() == TableStatus.CLEANING) {
+            throw new AppException(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, "Bàn đích đang trong quá trình dọn dẹp, chưa sẵn sàng để tiếp nhận khách!");
+        }
+
+        // Kiểm tra bàn đích có đang trong tiến trình thanh toán không
+        boolean hasPendingInvoiceTarget = invoiceRepository.findByRestaurantTableId(targetTable.getId()).stream()
+                .anyMatch(inv -> inv.getPaymentStatus() == PaymentStatus.PENDING);
+        if (hasPendingInvoiceTarget) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn đích đang trong quy trình thanh toán hóa đơn, không thể chuyển hoặc ghép bàn!");
+        }
+
         String oldSessionToken = sourceTable.getCurrentSessionToken();
 
         // Đảm bảo targetTable có Session Token
@@ -245,7 +258,7 @@ public class TableTransferServiceImpl implements TableTransferService {
             // Nghiệp vụ 1: CHUYỂN BÀN (MOVE: 1 -> 1)
             // Bàn đích bắt buộc phải đang AVAILABLE
             if (targetTable.getStatus() != TableStatus.AVAILABLE) {
-                throw new AppException(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, "Bàn đích hiện đang có khách ngồi hoặc đang dọn dẹp, vui lòng chọn bàn trống khác!");
+                throw new AppException(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, "Bàn đích hiện đang có khách ngồi hoặc không trống, vui lòng chọn bàn trống khác!");
             }
 
             // 1. Chuyển giỏ hàng nháp (Cart): Dọn dẹp giỏ tồn đọng ở bàn đích trước
@@ -273,15 +286,18 @@ public class TableTransferServiceImpl implements TableTransferService {
             // 3. Cập nhật trạng thái Bàn Đích
             targetTable.setStatus(TableStatus.OCCUPIED);
             targetTable.setSessionStartedAt(sourceTable.getSessionStartedAt() != null ? sourceTable.getSessionStartedAt() : LocalDateTime.now());
-            targetTable.setIsOrderLocked(false);
-            targetTable.setActiveDeviceCount(1);
+            if (!Boolean.TRUE.equals(targetTable.getIsOrderLocked())) {
+                targetTable.setIsOrderLocked(false);
+            }
             tableRepository.save(targetTable);
-
-            // 4. Giải phóng Bàn Nguồn về trạng thái AVAILABLE / CLEANING
-            resetSourceTableSession(sourceTable);
 
         } else {
             // Nghiệp vụ 2: GHÉP BÀN (MERGE: N -> 1)
+            // Bàn đích bắt buộc phải đang OCCUPIED (có khách đang phục vụ)
+            if (targetTable.getStatus() != TableStatus.OCCUPIED) {
+                throw new AppException(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, "Bàn đích hiện không có khách ngồi để ghép. Vui lòng chọn bàn đang phục vụ hoặc dùng tính năng Chuyển Bàn!");
+            }
+
             // 1. Hợp nhất giỏ hàng (Cart Merge Algorithm)
             Optional<Cart> sourceCartOpt = cartRepository.findByRestaurantTable(sourceTable);
             Optional<Cart> targetCartOpt = cartRepository.findByRestaurantTable(targetTable);
@@ -338,19 +354,13 @@ public class TableTransferServiceImpl implements TableTransferService {
             }
 
             // 3. Cập nhật Bàn Đích
-            if (targetTable.getStatus() == TableStatus.AVAILABLE) {
-                targetTable.setStatus(TableStatus.OCCUPIED);
-                targetTable.setSessionStartedAt(LocalDateTime.now());
+            if (!Boolean.TRUE.equals(targetTable.getIsOrderLocked())) {
+                targetTable.setIsOrderLocked(false);
             }
-            targetTable.setActiveDeviceCount((targetTable.getActiveDeviceCount() != null ? targetTable.getActiveDeviceCount() : 0) + 1);
-            targetTable.setIsOrderLocked(false);
             tableRepository.save(targetTable);
-
-            // 4. Giải phóng Bàn Nguồn
-            resetSourceTableSession(sourceTable);
         }
 
-        // 5. Cấp phát quyền thiết bị tại bàn mới cho người nhập mã
+        // 4. Di chuyển & đồng bộ danh sách thiết bị từ bàn nguồn sang bàn đích (tránh rơi rụng thiết bị thành viên)
         String effectiveDeviceToken = (deviceToken != null && !deviceToken.isBlank()) ? deviceToken : UUID.randomUUID().toString();
         boolean hasHost = tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(targetTable).isPresent();
         boolean isHost = !hasHost;
@@ -360,19 +370,51 @@ public class TableTransferServiceImpl implements TableTransferService {
             deviceName = isHost ? "Chủ Bàn (Thiết bị chuyển)" : "Thành Viên (" + targetTable.getTableNumber() + ")";
         }
 
-        TableSessionDevice newDevice = TableSessionDevice.builder()
-                .table(targetTable)
-                .deviceToken(effectiveDeviceToken)
-                .deviceName(deviceName)
-                .deviceFingerprint(request.getDeviceFingerprint())
-                .isHost(isHost)
-                .isActive(true)
-                .connectedAt(LocalDateTime.now())
-                .build();
-        tableSessionDeviceRepository.save(newDevice);
+        List<TableSessionDevice> sourceDevices = tableSessionDeviceRepository.findByTable(sourceTable);
+        boolean confirmedDeviceFound = false;
 
-        // 6. Hoàn tất giao dịch TableTransfer
+        for (TableSessionDevice d : sourceDevices) {
+            if (Boolean.TRUE.equals(d.getIsActive())) {
+                d.setTable(targetTable);
+                if (d.getDeviceToken().equals(effectiveDeviceToken)) {
+                    d.setIsHost(isHost);
+                    d.setDeviceName(deviceName);
+                    confirmedDeviceFound = true;
+                } else {
+                    // Mọi thành viên khác từ bàn nguồn sang bàn đích luôn có vai trò Thành Viên (Member)
+                    d.setIsHost(false);
+                }
+            }
+        }
+
+        if (!confirmedDeviceFound) {
+            TableSessionDevice newDevice = TableSessionDevice.builder()
+                    .table(targetTable)
+                    .deviceToken(effectiveDeviceToken)
+                    .deviceName(deviceName)
+                    .deviceFingerprint(request.getDeviceFingerprint())
+                    .isHost(isHost)
+                    .isActive(true)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+            sourceDevices.add(newDevice);
+        }
+
+        tableSessionDeviceRepository.saveAll(sourceDevices);
+
+        // 5. Giải phóng Bàn Nguồn về trạng thái AVAILABLE
+        resetSourceTableSession(sourceTable);
+
+        // 6. Cập nhật lại số lượng thiết bị hoạt động thực tế tại bàn đích
+        int totalActiveDevices = (int) tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(targetTable).size();
+        targetTable.setActiveDeviceCount(totalActiveDevices);
+        tableRepository.save(targetTable);
+
+        // 7. Hoàn tất giao dịch TableTransfer
         transfer.setStatus(TransferStatus.COMPLETED);
+        transfer.setTargetTable(targetTable);
+        transfer.setTargetSessionToken(newSessionToken);
+        tableTransferRepository.save(transfer);
         transfer.setTargetTable(targetTable);
         transfer.setTargetSessionToken(newSessionToken);
         tableTransferRepository.save(transfer);
@@ -503,11 +545,14 @@ public class TableTransferServiceImpl implements TableTransferService {
         table.setActiveDeviceCount(0);
         table.setSessionStartedAt(null);
         table.resetFailedAttempts();
+        table.setMasterTable(null);
         tableRepository.save(table);
 
         List<TableSessionDevice> oldDevices = tableSessionDeviceRepository.findByTable(table);
         for (TableSessionDevice d : oldDevices) {
-            d.setIsActive(false);
+            if (d.getTable() != null && Objects.equals(d.getTable().getId(), table.getId())) {
+                d.setIsActive(false);
+            }
         }
         tableSessionDeviceRepository.saveAll(oldDevices);
     }
@@ -543,6 +588,13 @@ public class TableTransferServiceImpl implements TableTransferService {
 
             RestaurantTable slave = tableRepository.findById(slaveId)
                     .orElseThrow(() -> new ResourceNotFoundException("RestaurantTable", "id", slaveId));
+
+            if (slave.isMaster()) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn " + slave.getTableNumber() + " đang là bàn chính của một cụm bàn khác, vui lòng tách cụm cũ trước");
+            }
+            if (slave.isLinked()) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn " + slave.getTableNumber() + " đang liên kết trong một cụm khác");
+            }
 
             // Kiểm tra bàn phụ có đang trong tiến trình thanh toán không
             boolean hasPendingInvoice = invoiceRepository.findByRestaurantTableId(slave.getId()).stream()
@@ -597,16 +649,20 @@ public class TableTransferServiceImpl implements TableTransferService {
 
         log.info("Nhân viên {} đã tách bàn phụ {} ra khỏi Cụm bàn {}", username, slave.getTableNumber(), master.getTableNumber());
 
-        List<String> remainingSlaves = tableRepository.findByMasterTable(master).stream()
+        List<RestaurantTable> remainingSlavesList = tableRepository.findByMasterTable(master);
+        List<String> remainingSlaves = remainingSlavesList.stream()
                 .map(RestaurantTable::getTableNumber)
                 .collect(java.util.stream.Collectors.toList());
+
+        int totalCap = (master.getCapacity() != null ? master.getCapacity() : 4) +
+                remainingSlavesList.stream().mapToInt(t -> t.getCapacity() != null ? t.getCapacity() : 4).sum();
 
         return TableClusterResponse.builder()
                 .masterTableId(master.getId())
                 .masterTableNumber(master.getTableNumber())
                 .masterTableName(master.getName())
                 .linkedTableNumbers(remainingSlaves)
-                .totalCapacity(master.getCapacity())
+                .totalCapacity(totalCap)
                 .message("Đã tách bàn " + slave.getTableNumber() + " ra khỏi cụm bàn " + master.getTableNumber() + " thành công!")
                 .build();
     }
@@ -624,6 +680,12 @@ public class TableTransferServiceImpl implements TableTransferService {
                 payload.put("isMaster", table.isMaster());
                 payload.put("isLinked", table.isLinked());
                 payload.put("masterTableNumber", table.getMasterTable() != null ? table.getMasterTable().getTableNumber() : null);
+
+                // Bổ sung danh sách các bàn phụ liên kết cho Sơ đồ bàn POS
+                List<String> linkedNums = tableRepository.findByMasterTable(table).stream()
+                        .map(RestaurantTable::getTableNumber)
+                        .collect(Collectors.toList());
+                payload.put("linkedTableNumbers", linkedNums);
 
                 messagingTemplate.convertAndSend("/topic/tables", payload);
             } catch (Exception e) {

@@ -275,8 +275,27 @@ public class TableQrServiceImpl implements TableQrService {
     @Transactional
     public void releaseTableSession(Long tableId) {
         RestaurantTable table = findTableEntity(tableId);
+
+        // 1. Nếu bàn này là Master Table: Tự động giải phóng toàn bộ bàn phụ (Slaves) liên kết
+        List<RestaurantTable> linkedSlaves = tableRepository.findByMasterTable(table);
+        if (linkedSlaves != null && !linkedSlaves.isEmpty()) {
+            for (RestaurantTable slave : linkedSlaves) {
+                slave.setMasterTable(null);
+                resetTableToAvailableSession(slave);
+                tableRepository.save(slave);
+                broadcastTableUpdate(slave);
+                log.info("Cụm bàn Master {} thanh toán/kết thúc: Tự động giải phóng bàn phụ {}", table.getTableNumber(), slave.getTableNumber());
+            }
+        }
+
+        // 2. Nếu bàn này là Slave Table: Gỡ liên kết khỏi Master
+        if (table.isLinked()) {
+            table.setMasterTable(null);
+        }
+
         resetTableToAvailableSession(table);
         tableRepository.save(table);
+        broadcastTableUpdate(table);
     }
 
     private void resetTableToAvailableSession(RestaurantTable table) {
@@ -287,6 +306,7 @@ public class TableQrServiceImpl implements TableQrService {
         table.setActiveDeviceCount(0);
         table.setSessionStartedAt(null);
         table.resetFailedAttempts();
+        table.setMasterTable(null);
 
         // Vô hiệu hóa toàn bộ thiết bị cũ của bàn
         List<TableSessionDevice> oldDevices = tableSessionDeviceRepository.findByTable(table);
