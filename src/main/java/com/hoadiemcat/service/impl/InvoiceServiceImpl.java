@@ -97,6 +97,14 @@ public class InvoiceServiceImpl implements InvoiceService {
         RestaurantTable table = tableRepository.findById(tableId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
 
+        // BẢO VỆ DOANH THU: Nếu Thu ngân chọn Bàn phụ của Cụm tiệc, tự động chuyển tiếp sang Bàn chính
+        if (table.isLinked()) {
+            log.info("Thu ngân chọn thanh toán bàn phụ {}, tự động chuyển tiếp thanh toán sang Bàn chính {}",
+                    table.getTableNumber(), table.getMasterTable() != null ? table.getMasterTable().getTableNumber() : "N/A");
+            table = table.getEffectiveTable();
+            tableId = table.getId();
+        }
+
         User cashier = null;
         if (cashierUsername != null) {
             cashier = userRepository.findByUsername(cashierUsername).orElse(null);
