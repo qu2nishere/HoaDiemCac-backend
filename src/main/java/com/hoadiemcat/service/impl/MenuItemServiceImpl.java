@@ -14,6 +14,7 @@ import com.hoadiemcat.repository.MenuItemRepository;
 import com.hoadiemcat.service.MenuItemService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ import java.text.Normalizer;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -31,6 +33,7 @@ public class MenuItemServiceImpl implements MenuItemService {
 
     private final MenuItemRepository menuItemRepository;
     private final CategoryRepository categoryRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     @Transactional(readOnly = true)
@@ -65,10 +68,28 @@ public class MenuItemServiceImpl implements MenuItemService {
                 .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", id));
 
         boolean currentStatus = Boolean.TRUE.equals(item.getIsAvailable());
-        item.setIsAvailable(!currentStatus);
+        boolean nextStatus = !currentStatus;
+        item.setIsAvailable(nextStatus);
         MenuItem saved = menuItemRepository.save(item);
 
         log.info("Cập nhật trạng thái món ăn ID {}: {}", id, saved.getIsAvailable() ? "Còn hàng" : "Hết hàng");
+
+        try {
+            Map<String, Object> event = Map.of(
+                    "type", nextStatus ? "MENU_ITEM_RESTOCKED" : "MENU_ITEM_OUT_OF_STOCK",
+                    "menuItemId", saved.getId(),
+                    "menuItemCode", saved.getCode(),
+                    "name", saved.getName(),
+                    "isAvailable", nextStatus,
+                    "message", nextStatus
+                            ? "Món ăn '" + saved.getName() + "' đã mở bán trở lại"
+                            : "Món ăn '" + saved.getName() + "' hiện tại đã tạm hết"
+            );
+            messagingTemplate.convertAndSend("/topic/menu-items", event);
+        } catch (Exception e) {
+            log.warn("Lỗi khi bắn WebSocket cập nhật trạng thái món: {}", e.getMessage());
+        }
+
         return mapToResponse(saved);
     }
 
@@ -141,6 +162,7 @@ public class MenuItemServiceImpl implements MenuItemService {
             item.setImageUrl(effectiveImageUrl);
         }
 
+        Boolean oldAvailable = item.getIsAvailable();
         if (request.getIsAvailable() != null) {
             item.setIsAvailable(request.getIsAvailable());
         }
@@ -159,6 +181,26 @@ public class MenuItemServiceImpl implements MenuItemService {
 
         MenuItem saved = menuItemRepository.save(item);
         log.info("Đã cập nhật món ăn ID {}: {} (Link CDN: {})", saved.getId(), saved.getName(), saved.getImageUrl());
+
+        if (request.getIsAvailable() != null && !request.getIsAvailable().equals(oldAvailable)) {
+            try {
+                boolean nextStatus = request.getIsAvailable();
+                Map<String, Object> event = Map.of(
+                        "type", nextStatus ? "MENU_ITEM_RESTOCKED" : "MENU_ITEM_OUT_OF_STOCK",
+                        "menuItemId", saved.getId(),
+                        "menuItemCode", saved.getCode(),
+                        "name", saved.getName(),
+                        "isAvailable", nextStatus,
+                        "message", nextStatus
+                                ? "Món ăn '" + saved.getName() + "' đã mở bán trở lại"
+                                : "Món ăn '" + saved.getName() + "' hiện tại đã tạm hết"
+                );
+                messagingTemplate.convertAndSend("/topic/menu-items", event);
+            } catch (Exception e) {
+                log.warn("Lỗi khi bắn WebSocket cập nhật trạng thái món: {}", e.getMessage());
+            }
+        }
+
         return mapToResponse(saved);
     }
 
