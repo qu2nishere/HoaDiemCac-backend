@@ -464,12 +464,14 @@ class TableTransferServiceTest {
         assertEquals(TableStatus.OCCUPIED, slaveTable.getStatus());
         assertEquals(targetTable.getCurrentSessionToken(), slaveTable.getCurrentSessionToken());
         assertEquals(targetTable.getCurrentPasscode(), slaveTable.getCurrentPasscode());
-        verify(tableRepository).save(slaveTable);
+        assertEquals(12, targetTable.getMaxActiveDevices(), "Trần thiết bị kết nối phải được nâng lên 12 cho cụm 8 chỗ");
+        verify(tableRepository, atLeastOnce()).save(slaveTable);
     }
 
     @Test
     @DisplayName("TC-TRF-12: Tách bàn phụ ra khỏi Cụm bàn liên kết thành công")
     void testUnlinkTableFromCluster_Success() {
+        targetTable.setCapacity(4);
         RestaurantTable slaveTable = RestaurantTable.builder()
                 .tableNumber("B06")
                 .name("Bàn 06")
@@ -487,6 +489,7 @@ class TableTransferServiceTest {
         assertNotNull(response);
         assertNull(slaveTable.getMasterTable());
         assertEquals(TableStatus.AVAILABLE, slaveTable.getStatus());
+        assertEquals(6, targetTable.getMaxActiveDevices(), "Trần thiết bị của bàn chính phải giảm về 6 khi cụm chỉ còn lại 1 bàn");
         verify(tableRepository, atLeastOnce()).save(slaveTable);
     }
 

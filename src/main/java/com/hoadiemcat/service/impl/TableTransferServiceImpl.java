@@ -617,6 +617,8 @@ public class TableTransferServiceImpl implements TableTransferService {
         table.setSessionStartedAt(null);
         table.resetFailedAttempts();
         table.setMasterTable(null);
+        int baseCap = table.getCapacity() != null ? table.getCapacity() : 4;
+        table.setMaxActiveDevices((int) Math.round(baseCap * 1.5));
         tableRepository.save(table);
 
         List<TableSessionDevice> oldDevices = tableSessionDeviceRepository.findByTable(table);
@@ -682,10 +684,24 @@ public class TableTransferServiceImpl implements TableTransferService {
             slave.setIsOrderLocked(false);
             tableRepository.save(slave);
 
+            // Chuyển toàn bộ Order tồn đọng của Bàn phụ sang Bàn chính để đảm bảo không thất thoát doanh thu
+            List<Order> slaveOrders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(slave);
+            for (Order o : slaveOrders) {
+                if (o.getStatus() != OrderStatus.CANCELLED) {
+                    o.setRestaurantTable(masterTable);
+                    o.setSessionToken(masterTable.getCurrentSessionToken());
+                    orderRepository.save(o);
+                }
+            }
+
             linkedNumbers.add(slave.getTableNumber());
             addedCapacity += (slave.getCapacity() != null ? slave.getCapacity() : 4);
             broadcastTableUpdate(slave);
         }
+
+        // Tự động nâng trần thiết bị kết nối đồng thời cho Master Table theo tổng sức chứa cụm bàn
+        masterTable.setMaxActiveDevices((int) Math.round(addedCapacity * 1.5));
+        tableRepository.save(masterTable);
 
         broadcastTableUpdate(masterTable);
 
@@ -727,6 +743,9 @@ public class TableTransferServiceImpl implements TableTransferService {
 
         int totalCap = (master.getCapacity() != null ? master.getCapacity() : 4) +
                 remainingSlavesList.stream().mapToInt(t -> t.getCapacity() != null ? t.getCapacity() : 4).sum();
+
+        master.setMaxActiveDevices((int) Math.round(totalCap * 1.5));
+        tableRepository.save(master);
 
         return TableClusterResponse.builder()
                 .masterTableId(master.getId())

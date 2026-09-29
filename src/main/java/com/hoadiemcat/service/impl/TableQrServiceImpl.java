@@ -307,6 +307,8 @@ public class TableQrServiceImpl implements TableQrService {
         table.setSessionStartedAt(null);
         table.resetFailedAttempts();
         table.setMasterTable(null);
+        int baseCap = table.getCapacity() != null ? table.getCapacity() : 4;
+        table.setMaxActiveDevices((int) Math.round(baseCap * 1.5));
 
         // Vô hiệu hóa toàn bộ thiết bị cũ của bàn
         List<TableSessionDevice> oldDevices = tableSessionDeviceRepository.findByTable(table);
