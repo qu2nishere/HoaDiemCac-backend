@@ -590,7 +590,7 @@ public class TableTransferServiceImpl implements TableTransferService {
 
             messagingTemplate.convertAndSend("/topic/table/" + oldSessionToken, redirectPayload);
 
-            // 2. Kênh trạm Bếp KDS: Cập nhật số bàn
+            // 2. Kênh trạm Bếp KDS & Phục Vụ Waiter: Cập nhật số bàn
             Map<String, Object> kitchenPayload = Map.of(
                     "event", "TABLE_CHANGED",
                     "oldTableNumber", sourceTable.getTableNumber(),
@@ -598,6 +598,7 @@ public class TableTransferServiceImpl implements TableTransferService {
                     "message", "Các món của bàn " + sourceTable.getTableNumber() + " đã đổi sang phục vụ tại bàn " + targetTable.getTableNumber()
             );
             messagingTemplate.convertAndSend("/topic/kitchen/orders", kitchenPayload);
+            messagingTemplate.convertAndSend("/topic/waiter/orders", kitchenPayload);
 
             // 3. Kênh sơ đồ bàn: Cập nhật Admin & Waiter
             broadcastTableUpdate(sourceTable);
