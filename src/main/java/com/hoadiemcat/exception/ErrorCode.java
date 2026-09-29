@@ -17,7 +17,10 @@ public enum ErrorCode {
     TABLE_LOCKED(1007, "Bàn đang bị khóa tạm thời hoặc bị khóa gọi món", HttpStatus.FORBIDDEN),
     DEVICE_LIMIT_EXCEEDED(1008, "Bàn đã đạt giới hạn thiết bị truy cập đồng thời", HttpStatus.TOO_MANY_REQUESTS),
     HOST_PERMISSION_REQUIRED(1009, "Chỉ Chủ Bàn mới có quyền thực hiện thao tác này", HttpStatus.FORBIDDEN),
-    DEVICE_NOT_FOUND(1010, "Không tìm thấy thiết bị yêu cầu", HttpStatus.NOT_FOUND);
+    DEVICE_NOT_FOUND(1010, "Không tìm thấy thiết bị yêu cầu", HttpStatus.NOT_FOUND),
+    TRANSFER_CODE_INVALID(1011, "Mã chuyển bàn không hợp lệ hoặc đã được sử dụng", HttpStatus.BAD_REQUEST),
+    TRANSFER_CODE_EXPIRED(1012, "Mã chuyển bàn đã hết hạn hiệu lực", HttpStatus.BAD_REQUEST),
+    TARGET_TABLE_NOT_AVAILABLE(1013, "Bàn đích không ở trạng thái sẵn sàng để chuyển/ghép", HttpStatus.BAD_REQUEST);
 
     private final int code;
     private final String message;
