@@ -20,5 +20,6 @@ public class TableTransferConfirmResponse {
     private Boolean isHost;
     private Integer cartItemCount;
     private Integer activeOrderRounds;
+    private java.util.List<DraftCartItemResponse> cartItems;
     private String message;
 }

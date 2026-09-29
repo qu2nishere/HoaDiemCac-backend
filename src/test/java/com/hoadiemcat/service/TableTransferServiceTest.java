@@ -1,7 +1,9 @@
 package com.hoadiemcat.service;
 
+import com.hoadiemcat.dto.request.DraftCartItemRequest;
 import com.hoadiemcat.dto.request.TableTransferConfirmRequest;
 import com.hoadiemcat.dto.request.TableTransferRequest;
+import com.hoadiemcat.dto.response.DraftCartItemResponse;
 import com.hoadiemcat.dto.response.TableTransferConfirmResponse;
 import com.hoadiemcat.dto.response.TableTransferResponse;
 import com.hoadiemcat.entity.*;
@@ -51,6 +53,12 @@ class TableTransferServiceTest {
 
     @Mock
     private InvoiceRepository invoiceRepository;
+
+    @Mock
+    private MenuItemRepository menuItemRepository;
+
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
 
     @InjectMocks
     private TableTransferServiceImpl tableTransferService;
@@ -140,6 +148,7 @@ class TableTransferServiceTest {
 
         when(tableTransferRepository.findByTransferCode("TRF-8888")).thenReturn(Optional.of(transfer));
         when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+        when(cartRepository.findByRestaurantTable(targetTable)).thenReturn(Optional.empty()).thenReturn(Optional.of(sourceCart));
         when(cartRepository.findByRestaurantTable(sourceTable)).thenReturn(Optional.of(sourceCart));
         when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(sourceTable)).thenReturn(Collections.emptyList());
         when(tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(targetTable))
@@ -313,5 +322,84 @@ class TableTransferServiceTest {
         assertFalse(sourceTable.getIsOrderLocked(), "Bàn nguồn phải được mở khóa bình thường");
         verify(tableTransferRepository).save(transfer);
         verify(tableRepository).save(sourceTable);
+    }
+
+    @Test
+    @DisplayName("TC-TRF-08: Yêu cầu chuyển bàn kèm giỏ hàng nháp (Đồng bộ vào Cart DB bảo toàn món ăn)")
+    void testRequestTransfer_WithDraftCartItems_SyncsToDatabase() {
+        DraftCartItemRequest draftItem = DraftCartItemRequest.builder()
+                .menuItemId(10L)
+                .name("Lẩu Thái Hoàng Gia")
+                .price(new BigDecimal("350000"))
+                .quantity(3)
+                .note("Ít cay")
+                .build();
+
+        TableTransferRequest request = TableTransferRequest.builder()
+                .sourceTableNumber("B01")
+                .transferType(TransferType.MOVE)
+                .reason("Khách chuyển bàn")
+                .draftCartItems(List.of(draftItem))
+                .build();
+
+        when(tableRepository.findByTableNumber("B01")).thenReturn(Optional.of(sourceTable));
+        when(invoiceRepository.findByRestaurantTableId(1L)).thenReturn(Collections.emptyList());
+        when(tableTransferRepository.findFirstBySourceTableAndStatus(sourceTable, TransferStatus.PENDING)).thenReturn(Optional.empty());
+        when(cartRepository.findByRestaurantTable(sourceTable)).thenReturn(Optional.empty());
+        when(menuItemRepository.findById(10L)).thenReturn(Optional.of(menuItemHotpot));
+        when(cartRepository.save(any(Cart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TableTransferResponse response = tableTransferService.requestTransfer(request, "device-host", "session-token-b01");
+
+        assertNotNull(response);
+        verify(cartRepository, atLeastOnce()).save(any(Cart.class));
+    }
+
+    @Test
+    @DisplayName("TC-TRF-09: Xác nhận chuyển bàn trả về đầy đủ giỏ hàng nháp đã hợp nhất (cartItems trong response)")
+    void testConfirmTransfer_ReturnsMergedDraftCart() {
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-5555")
+                .transferType(TransferType.MOVE)
+                .sourceTable(sourceTable)
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        Cart sourceCart = Cart.builder()
+                .restaurantTable(sourceTable)
+                .sessionToken("session-token-b01")
+                .items(new ArrayList<>())
+                .build();
+        CartItem cartItem = CartItem.builder()
+                .cart(sourceCart)
+                .menuItem(menuItemHotpot)
+                .quantity(2)
+                .note("Không hành")
+                .build();
+        sourceCart.addItem(cartItem);
+
+        when(tableTransferRepository.findByTransferCode("TRF-5555")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B05")).thenReturn(Optional.of(targetTable));
+        when(cartRepository.findByRestaurantTable(targetTable)).thenReturn(Optional.empty()).thenReturn(Optional.of(sourceCart));
+        when(cartRepository.findByRestaurantTable(sourceTable)).thenReturn(Optional.of(sourceCart));
+        when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(sourceTable)).thenReturn(Collections.emptyList());
+        when(tableSessionDeviceRepository.findFirstByTableAndIsHostTrueAndIsActiveTrue(targetTable)).thenReturn(Optional.empty());
+
+        TableTransferConfirmRequest confirmReq = TableTransferConfirmRequest.builder()
+                .transferCode("TRF-5555")
+                .targetTableNumber("B05")
+                .deviceName("Chủ Bàn")
+                .build();
+
+        TableTransferConfirmResponse confirmResponse = tableTransferService.confirmTransfer(confirmReq, "device-token-1");
+
+        assertNotNull(confirmResponse);
+        assertEquals("B05", confirmResponse.getNewTableNumber());
+        assertNotNull(confirmResponse.getCartItems());
+        assertEquals(1, confirmResponse.getCartItems().size());
+        assertEquals("Lẩu Thái Hoàng Gia", confirmResponse.getCartItems().get(0).getName());
+        assertEquals(2, confirmResponse.getCartItems().get(0).getQuantity());
+        assertEquals("Không hành", confirmResponse.getCartItems().get(0).getNote());
     }
 }

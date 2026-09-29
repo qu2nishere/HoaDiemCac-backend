@@ -21,4 +21,6 @@ public class TableTransferRequest {
     private TransferType transferType;
 
     private String reason;
+
+    private java.util.List<DraftCartItemRequest> draftCartItems;
 }

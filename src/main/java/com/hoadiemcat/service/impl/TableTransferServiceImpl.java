@@ -1,8 +1,10 @@
 package com.hoadiemcat.service.impl;
 
+import com.hoadiemcat.dto.request.DraftCartItemRequest;
 import com.hoadiemcat.dto.request.TableDirectTransferRequest;
 import com.hoadiemcat.dto.request.TableTransferConfirmRequest;
 import com.hoadiemcat.dto.request.TableTransferRequest;
+import com.hoadiemcat.dto.response.DraftCartItemResponse;
 import com.hoadiemcat.dto.response.TableTransferConfirmResponse;
 import com.hoadiemcat.dto.response.TableTransferResponse;
 import com.hoadiemcat.entity.*;
@@ -35,6 +37,7 @@ public class TableTransferServiceImpl implements TableTransferService {
     private final CartRepository cartRepository;
     private final OrderRepository orderRepository;
     private final InvoiceRepository invoiceRepository;
+    private final MenuItemRepository menuItemRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     private static final int TRANSFER_TTL_MINUTES = 5;
@@ -121,6 +124,9 @@ public class TableTransferServiceImpl implements TableTransferService {
         if (existingOpt.isPresent()) {
             TableTransfer existing = existingOpt.get();
             if (!existing.isExpired()) {
+                // Đồng bộ cập nhật giỏ hàng nếu khách thêm món mới trong khi mã còn hiệu lực
+                syncDraftCart(sourceTable, request.getDraftCartItems());
+
                 long remainingSeconds = Duration.between(LocalDateTime.now(), existing.getExpiresAt()).getSeconds();
                 return TableTransferResponse.builder()
                         .transferCode(existing.getTransferCode())
@@ -145,6 +151,9 @@ public class TableTransferServiceImpl implements TableTransferService {
         // 6. Khóa tạm thời quyền gọi món của bàn nguồn để bảo toàn giỏ hàng
         sourceTable.setIsOrderLocked(true);
         tableRepository.save(sourceTable);
+
+        // Đồng bộ giỏ hàng nháp từ client vào Database để bảo toàn dữ liệu trước khi di chuyển
+        syncDraftCart(sourceTable, request.getDraftCartItems());
 
         TableTransfer transfer = TableTransfer.builder()
                 .transferCode(transferCode)
@@ -216,7 +225,6 @@ public class TableTransferServiceImpl implements TableTransferService {
         }
         String newSessionToken = targetTable.getCurrentSessionToken();
 
-        int cartItemCount = 0;
         int activeOrderRounds = 0;
 
         if (transfer.getTransferType() == TransferType.MOVE) {
@@ -226,14 +234,15 @@ public class TableTransferServiceImpl implements TableTransferService {
                 throw new AppException(ErrorCode.TARGET_TABLE_NOT_AVAILABLE, "Bàn đích hiện đang có khách ngồi hoặc đang dọn dẹp, vui lòng chọn bàn trống khác!");
             }
 
-            // 1. Chuyển giỏ hàng nháp (Cart)
+            // 1. Chuyển giỏ hàng nháp (Cart): Dọn dẹp giỏ tồn đọng ở bàn đích trước
+            cartRepository.findByRestaurantTable(targetTable).ifPresent(cartRepository::delete);
+
             Optional<Cart> sourceCartOpt = cartRepository.findByRestaurantTable(sourceTable);
             if (sourceCartOpt.isPresent()) {
                 Cart sourceCart = sourceCartOpt.get();
                 sourceCart.setRestaurantTable(targetTable);
                 sourceCart.setSessionToken(newSessionToken);
                 cartRepository.save(sourceCart);
-                cartItemCount = sourceCart.getItems() != null ? sourceCart.getItems().size() : 0;
             }
 
             // 2. Chuyển các đợt gọi món đã đặt (Orders)
@@ -289,14 +298,12 @@ public class TableTransferServiceImpl implements TableTransferService {
                 }
                 cartRepository.save(targetCart);
                 cartRepository.delete(sourceCart);
-                cartItemCount = targetCart.getItems().size();
 
             } else if (sourceCartOpt.isPresent()) {
                 Cart sourceCart = sourceCartOpt.get();
                 sourceCart.setRestaurantTable(targetTable);
                 sourceCart.setSessionToken(newSessionToken);
                 cartRepository.save(sourceCart);
-                cartItemCount = sourceCart.getItems().size();
             }
 
             // 2. Hợp nhất các đợt gọi món đã đặt (Orders)
@@ -356,8 +363,11 @@ public class TableTransferServiceImpl implements TableTransferService {
         transfer.setTargetSessionToken(newSessionToken);
         tableTransferRepository.save(transfer);
 
+        // Lấy danh sách món trong giỏ hàng hiện tại của bàn đích sau khi chuyển/ghép
+        List<DraftCartItemResponse> finalCartItems = getDraftCartItemResponses(targetTable);
+
         // 7. Phát các sự kiện WebSocket đồng bộ toàn hệ thống
-        broadcastTransferEvents(sourceTable, targetTable, oldSessionToken, newSessionToken);
+        broadcastTransferEvents(sourceTable, targetTable, oldSessionToken, newSessionToken, finalCartItems);
 
         log.info("Chuyển/ghép bàn thành công từ {} sang {} với mã {}", sourceTable.getTableNumber(), targetTable.getTableNumber(), cleanCode);
 
@@ -369,7 +379,8 @@ public class TableTransferServiceImpl implements TableTransferService {
                 .deviceToken(effectiveDeviceToken)
                 .deviceName(deviceName)
                 .isHost(isHost)
-                .cartItemCount(cartItemCount)
+                .cartItemCount(finalCartItems.size())
+                .cartItems(finalCartItems)
                 .activeOrderRounds(activeOrderRounds)
                 .message("Chuyển bàn sang " + targetTable.getTableNumber() + " thành công!")
                 .build();
@@ -504,19 +515,79 @@ public class TableTransferServiceImpl implements TableTransferService {
         }
     }
 
-    private void broadcastTransferEvents(RestaurantTable sourceTable, RestaurantTable targetTable, String oldSessionToken, String newSessionToken) {
+    private void syncDraftCart(RestaurantTable table, List<DraftCartItemRequest> draftItems) {
+        if (draftItems == null || draftItems.isEmpty()) {
+            return;
+        }
+        Cart cart = cartRepository.findByRestaurantTable(table)
+                .orElseGet(() -> Cart.builder()
+                        .restaurantTable(table)
+                        .sessionToken(table.getCurrentSessionToken() != null ? table.getCurrentSessionToken() : "SESSION_" + table.getTableNumber())
+                        .items(new ArrayList<>())
+                        .build()
+                );
+
+        if (cart.getItems() == null) {
+            cart.setItems(new ArrayList<>());
+        } else {
+            cart.getItems().clear();
+        }
+
+        for (DraftCartItemRequest draftItem : draftItems) {
+            if (draftItem.getMenuItemId() != null && draftItem.getQuantity() != null && draftItem.getQuantity() > 0) {
+                menuItemRepository.findById(draftItem.getMenuItemId()).ifPresent(menuItem -> {
+                    CartItem cartItem = CartItem.builder()
+                            .cart(cart)
+                            .menuItem(menuItem)
+                            .quantity(Math.min(draftItem.getQuantity(), 99))
+                            .note(draftItem.getNote() != null ? draftItem.getNote().trim() : null)
+                            .build();
+                    cart.addItem(cartItem);
+                });
+            }
+        }
+        cartRepository.save(cart);
+    }
+
+    private List<DraftCartItemResponse> getDraftCartItemResponses(RestaurantTable table) {
+        List<DraftCartItemResponse> result = new ArrayList<>();
+        Optional<Cart> cartOpt = cartRepository.findByRestaurantTable(table);
+        if (cartOpt.isPresent()) {
+            Cart cart = cartOpt.get();
+            if (cart.getItems() != null) {
+                for (CartItem ci : cart.getItems()) {
+                    MenuItem m = ci.getMenuItem();
+                    if (m != null) {
+                        result.add(DraftCartItemResponse.builder()
+                                .id(m.getId())
+                                .name(m.getName())
+                                .price(m.getPrice())
+                                .quantity(ci.getQuantity())
+                                .note(ci.getNote())
+                                .image(m.getImageUrl())
+                                .unit(m.getUnit())
+                                .build());
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    private void broadcastTransferEvents(RestaurantTable sourceTable, RestaurantTable targetTable, String oldSessionToken, String newSessionToken, List<DraftCartItemResponse> cartItems) {
         if (messagingTemplate == null) return;
 
         try {
-            // 1. Kênh bàn cũ: Chuyển hướng các thiết bị đang mở app
-            Map<String, Object> redirectPayload = Map.of(
-                    "event", "TABLE_TRANSFERRED",
-                    "oldTableNumber", sourceTable.getTableNumber(),
-                    "newTableNumber", targetTable.getTableNumber(),
-                    "newTableName", targetTable.getName(),
-                    "newSessionToken", newSessionToken,
-                    "message", "Bàn ăn của bạn đã được chuyển sang " + targetTable.getName() + " (" + targetTable.getTableNumber() + ")."
-            );
+            // 1. Kênh bàn cũ: Chuyển hướng các thiết bị đang mở app kèm theo giỏ hàng nháp đã hợp nhất
+            Map<String, Object> redirectPayload = new HashMap<>();
+            redirectPayload.put("event", "TABLE_TRANSFERRED");
+            redirectPayload.put("oldTableNumber", sourceTable.getTableNumber());
+            redirectPayload.put("newTableNumber", targetTable.getTableNumber());
+            redirectPayload.put("newTableName", targetTable.getName());
+            redirectPayload.put("newSessionToken", newSessionToken);
+            redirectPayload.put("cartItems", cartItems != null ? cartItems : Collections.emptyList());
+            redirectPayload.put("message", "Bàn ăn của bạn đã được chuyển sang " + targetTable.getName() + " (" + targetTable.getTableNumber() + ").");
+
             messagingTemplate.convertAndSend("/topic/table/" + oldSessionToken, redirectPayload);
 
             // 2. Kênh trạm Bếp KDS: Cập nhật số bàn
