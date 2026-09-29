@@ -106,6 +106,21 @@ public class TableTransferServiceImpl implements TableTransferService {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Chỉ có thể chuyển hoặc ghép bàn khi bàn đang có khách");
         }
 
+        // Chặn nếu bàn đang là bàn phụ trong cụm bàn tiệc lớn
+        if (sourceTable.isLinked()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Bàn " + sourceTable.getTableNumber() + " đang là bàn phụ trong Cụm bàn "
+                            + (sourceTable.getMasterTable() != null ? sourceTable.getMasterTable().getTableNumber() : "")
+                            + ". Vui lòng thực hiện chuyển trên Bàn chính hoặc nhờ nhân viên hỗ trợ tách bàn!");
+        }
+
+        // Chặn nếu bàn đang là Bàn chính liên kết với các bàn phụ (yêu cầu tách hoặc điều chuyển cụm trên POS)
+        List<RestaurantTable> currentSlaves = tableRepository.findByMasterTable(sourceTable);
+        if (currentSlaves != null && !currentSlaves.isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Bàn " + sourceTable.getTableNumber() + " đang là Bàn chính liên kết với các bàn phụ. Vui lòng liên hệ nhân viên để điều chuyển cả cụm bàn hoặc tách cụm trước khi chuyển bàn!");
+        }
+
         // 2. Kiểm tra bàn có đang trong tiến trình thanh toán không
         boolean hasPendingInvoice = invoiceRepository.findByRestaurantTableId(sourceTable.getId()).stream()
                 .anyMatch(inv -> inv.getPaymentStatus() == PaymentStatus.PENDING);
@@ -251,6 +266,13 @@ public class TableTransferServiceImpl implements TableTransferService {
         }
 
         RestaurantTable targetTable = findTableByNumber(request.getTargetTableNumber());
+
+        // Nếu bàn đích là bàn phụ trong cụm, tự động điều hướng sang bàn chính của cụm đó để ghép đúng dữ liệu
+        if (targetTable.isLinked()) {
+            log.info("Bàn đích {} là bàn phụ, tự động điều hướng sang Bàn chính {}",
+                    targetTable.getTableNumber(), targetTable.getMasterTable() != null ? targetTable.getMasterTable().getTableNumber() : "N/A");
+            targetTable = targetTable.getEffectiveTable();
+        }
 
         // Kiểm tra không được chuyển vào chính nó
         if (sourceTable.getId().equals(targetTable.getId())) {
@@ -491,6 +513,18 @@ public class TableTransferServiceImpl implements TableTransferService {
         }
 
         RestaurantTable sourceTable = transfer.getSourceTable();
+
+        // Phân quyền: Kiểm tra người hủy phải là Chủ Bàn (Host) hoặc Nhân viên (Staff)
+        if (deviceToken != null && !deviceToken.isBlank()
+                && !deviceToken.startsWith("STAFF_")
+                && !deviceToken.startsWith("ADMIN_")
+                && !"STAFF_DIRECT_TOKEN".equals(deviceToken)) {
+            tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue(deviceToken).ifPresent(device -> {
+                if (device.getTable().getId().equals(sourceTable.getId()) && !Boolean.TRUE.equals(device.getIsHost())) {
+                    throw new AppException(ErrorCode.HOST_PERMISSION_REQUIRED, "Chỉ Chủ Bàn (Host) mới có quyền hủy yêu cầu chuyển hoặc ghép bàn");
+                }
+            });
+        }
 
         transfer.setStatus(TransferStatus.CANCELLED);
         tableTransferRepository.save(transfer);

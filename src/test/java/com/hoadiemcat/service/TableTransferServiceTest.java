@@ -668,4 +668,120 @@ class TableTransferServiceTest {
         assertEquals("B05", response.getNewTableNumber());
         assertEquals("session-token-b05", response.getNewSessionToken());
     }
+
+    @Test
+    @DisplayName("EDGE-21: Từ chối tạo mã chuyển khi bàn nguồn là Bàn phụ (Slave) của cụm bàn")
+    void testRequestTransfer_RejectsWhenSourceIsLinkedSlave() {
+        RestaurantTable master = RestaurantTable.builder().tableNumber("B01").build();
+        master.setId(1L);
+        sourceTable.setMasterTable(master);
+
+        TableTransferRequest request = TableTransferRequest.builder()
+                .sourceTableNumber("B01")
+                .transferType(TransferType.MOVE)
+                .build();
+
+        when(tableRepository.findByTableNumber("B01")).thenReturn(Optional.of(sourceTable));
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.requestTransfer(request, "device-host", "session-token-b01"));
+        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
+        assertTrue(ex.getMessage().contains("đang là bàn phụ"));
+    }
+
+    @Test
+    @DisplayName("EDGE-22: Từ chối tạo mã chuyển khi bàn nguồn là Bàn chính (Master) có các bàn phụ liên kết")
+    void testRequestTransfer_RejectsWhenSourceIsMasterWithSlaves() {
+        RestaurantTable slave = RestaurantTable.builder().tableNumber("B02").masterTable(sourceTable).build();
+        slave.setId(2L);
+
+        TableTransferRequest request = TableTransferRequest.builder()
+                .sourceTableNumber("B01")
+                .transferType(TransferType.MOVE)
+                .build();
+
+        when(tableRepository.findByTableNumber("B01")).thenReturn(Optional.of(sourceTable));
+        when(tableRepository.findByMasterTable(sourceTable)).thenReturn(List.of(slave));
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.requestTransfer(request, "device-host", "session-token-b01"));
+        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
+        assertTrue(ex.getMessage().contains("đang là Bàn chính"));
+    }
+
+    @Test
+    @DisplayName("EDGE-20: Tự động điều hướng ghép vào Bàn chính khi Bàn đích là Bàn phụ của cụm")
+    void testConfirmTransfer_Merge_AutoRoutesToMasterWhenTargetIsSlave() {
+        RestaurantTable master = RestaurantTable.builder()
+                .tableNumber("B09")
+                .name("Bàn 09 (Chính)")
+                .status(TableStatus.OCCUPIED)
+                .currentSessionToken("session-token-b09")
+                .currentPasscode("9999")
+                .isOrderLocked(false)
+                .build();
+        master.setId(9L);
+
+        RestaurantTable slave = RestaurantTable.builder()
+                .tableNumber("B10")
+                .name("Bàn 10 (Phụ)")
+                .status(TableStatus.OCCUPIED)
+                .masterTable(master)
+                .currentSessionToken("session-token-b09")
+                .currentPasscode("9999")
+                .isOrderLocked(false)
+                .build();
+        slave.setId(10L);
+
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-6666")
+                .transferType(TransferType.MERGE)
+                .sourceTable(sourceTable)
+                .sourceSessionToken("session-token-b01")
+                .status(TransferStatus.PENDING)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-6666")).thenReturn(Optional.of(transfer));
+        when(tableRepository.findByTableNumber("B10")).thenReturn(Optional.of(slave));
+        when(cartRepository.findByRestaurantTable(sourceTable)).thenReturn(Optional.empty());
+        when(cartRepository.findByRestaurantTable(master)).thenReturn(Optional.empty());
+        when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(sourceTable)).thenReturn(Collections.emptyList());
+        when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(master)).thenReturn(Collections.emptyList());
+
+        TableTransferConfirmRequest request = TableTransferConfirmRequest.builder()
+                .targetTableNumber("B10")
+                .transferCode("TRF-6666")
+                .targetPasscode("9999")
+                .build();
+
+        TableTransferConfirmResponse response = tableTransferService.confirmTransfer(request, "STAFF_POS");
+        assertNotNull(response);
+        assertEquals("B09", response.getNewTableNumber(), "Ghép vào bàn phụ B10 phải tự động chuyển thành ghép vào bàn chính B09");
+    }
+
+    @Test
+    @DisplayName("EDGE-26: Từ chối hủy chuyển bàn khi thiết bị chỉ là Thành viên (Member)")
+    void testCancelTransfer_RejectsWhenMemberCancels() {
+        TableTransfer transfer = TableTransfer.builder()
+                .transferCode("TRF-7777")
+                .sourceTable(sourceTable)
+                .status(TransferStatus.PENDING)
+                .build();
+
+        TableSessionDevice memberDevice = TableSessionDevice.builder()
+                .table(sourceTable)
+                .deviceToken("token-member")
+                .isHost(false)
+                .isActive(true)
+                .build();
+
+        when(tableTransferRepository.findByTransferCode("TRF-7777")).thenReturn(Optional.of(transfer));
+        when(tableSessionDeviceRepository.findByDeviceTokenAndIsActiveTrue("token-member"))
+                .thenReturn(Optional.of(memberDevice));
+
+        AppException ex = assertThrows(AppException.class, () ->
+                tableTransferService.cancelTransfer("TRF-7777", "token-member"));
+        assertEquals(ErrorCode.HOST_PERMISSION_REQUIRED, ex.getErrorCode());
+    }
 }
