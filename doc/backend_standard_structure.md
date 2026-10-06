@@ -94,9 +94,9 @@ HoaDiemCac-server/
 │   │   │   │   ├── Order.java              # Đợt gọi món (Order Round) gửi vào bếp (UC05)
 │   │   │   │   ├── OrderItem.java          # Món ăn cụ thể trong đợt gọi kèm trạng thái chế biến (UC18)
 │   │   │   │   ├── RestaurantTable.java    # Bàn ăn, Dynamic QR, xoay PIN, cờ khóa, Cụm bàn (UC11, UC27)
-│   │   │   │   ├── TableSessionDevice.java # Thiết bị khách hàng tại bàn, phân quyền Host/Member (UC35)
-│   │   │   │   ├── TableTransfer.java      # Giao dịch Chuyển/Ghép bàn áp dụng 2-Phase Lock (UC33, UC34)
-│   │   │   │   ├── User.java               # Tài khoản quản trị, nhân viên, bếp (UC09, UC36)
+│   │   │   │   ├── TableSessionDevice.java # Thiết bị khách hàng tại bàn, phân quyền Host/Member (UC33, UC37)
+│   │   │   │   ├── TableTransfer.java      # Giao dịch Chuyển/Ghép bàn áp dụng 2-Phase Lock (UC34, UC35, UC36)
+│   │   │   │   ├── User.java               # Tài khoản quản trị, nhân viên, bếp (UC09, UC39)
 │   │   │   │   └── enums/                  # Các Enum định danh trạng thái nghiệp vụ
 │   │   │   │       ├── CallStaffStatus.java     # PENDING, RESOLVED, CANCELLED
 │   │   │   │       ├── CallStaffType.java       # CALL_STAFF, PAYMENT_REQUEST, ICE_WATER, UTENSILS, OTHER

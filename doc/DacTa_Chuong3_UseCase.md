@@ -1,9 +1,13 @@
 # CHƯƠNG 3: MÔ HÌNH HÓA YÊU CẦU
-## Hệ thống Order & Quản trị Nhà hàng qua Mã QR (DacTa)
+## Hệ thống Order & Quản trị Nhà hàng qua Mã QR (Hỏa Diễm Các)
 
-> Tài liệu này dựa trên các yêu cầu chức năng đã xác định ở Chương 2 của **DacTa.docx** (Bảng 1–11, Quy định QĐ1–QĐ10), được mô hình hóa theo đúng cấu trúc trình bày của **Nhom02_FinalProject.docx** (Chương 3 – Mô hình hóa): Use Case tổng quát → Lược đồ Use Case chi tiết (kèm bảng chú thích) → Đặc tả Use Case chi tiết. Các lược đồ được cung cấp dưới dạng mã nguồn **PlantUML** thay cho hình ảnh.
+> Tài liệu này được chuẩn hóa và cập nhật trực tiếp dựa trên danh mục Use Case mới nhất từ **UC-new.pdf** (gồm 42 Use Case từ UC01 đến UC42), mô hình hóa theo cấu trúc chuẩn: Use Case tổng quát → Lược đồ Use Case chi tiết phân hệ (kèm bảng chú thích) → Đặc tả Use Case chi tiết 13 thành phần. Các lược đồ được cung cấp dưới dạng mã nguồn **PlantUML** trực quan, đồng bộ và có khả năng sinh ảnh tự động.
 >
-> **4 actor chính:** Khách hàng (tại bàn, không cần tài khoản), Nhân viên Bếp (Kitchen/Bar), Nhân viên Phục vụ (Waiter), Quản trị viên & Quản lý (Admin / Manager).
+> **4 Nhóm Actor chính:**
+> 1. **Khách hàng (Customer):** Thực khách tại bàn (quét QR, xác thực mã PIN, xem thực đơn, gọi món, quản lý giỏ hàng chung, theo dõi tiến độ món, gọi phục vụ, yêu cầu thanh toán, chuyển/ghép bàn).
+> 2. **Nhân viên Bếp (Kitchen/Bar):** Tiếp nhận đơn gọi món thời gian thực (KDS), cập nhật trạng thái chế biến món (COOKING, SERVED), báo hết món khẩn cấp (SOLD OUT) và mở bán lại (Restock).
+> 3. **Nhân viên Phục vụ (Waiter):** Tiếp nhận chuông gọi phục vụ từ khách, màn hình điều phối tiếp thực bưng món đã làm xong (DELIVERED), hỗ trợ chuyển/ghép bàn trực tiếp tại sảnh.
+> 4. **Quản trị viên & Quản lý (Admin / Manager):** Quản lý thực đơn, danh mục, tải ảnh CDN, quản lý bàn ăn, in thẻ QR & PIN, xem sơ đồ tổng quát, thu ngân chốt bill (Tiền mặt/VietQR), quản lý tài khoản nhân viên, phân quyền và tra cứu lịch sử hóa đơn doanh thu.
 
 ---
 
@@ -11,7 +15,7 @@
 
 ### 3.1.1 Use Case tổng quát
 
-**Hình 1: Lược đồ use case tổng quát**
+**Hình 1: Lược đồ use case tổng quát toàn hệ thống (UC01 - UC42)**
 
 ```plantuml
 @startuml uc-tong-quat
@@ -27,50 +31,55 @@ actor "Nhân viên Bếp" as NVB
 actor "Nhân viên Phục vụ" as NVPV
 actor "Quản lý / Admin" as QL
 
-rectangle "Hệ thống Order & Quản trị Nhà hàng qua QR" {
+rectangle "Hệ thống Order & Quản trị Nhà hàng qua QR (Hỏa Diễm Các)" {
 
-  package "Chức năng Khách hàng" {
-    usecase "UC01\nQuét mã QR vào bàn" as UC01
-    usecase "UC02\nXem thực đơn" as UC02
-    usecase "UC03\nXem chi tiết món ăn" as UC03
-    usecase "UC04\nQuản lý giỏ hàng chung\n(Realtime Cart)" as UC04
-    usecase "UC05\nGửi đơn gọi món" as UC05
-    usecase "UC06\nTheo dõi trạng thái món ăn" as UC06
-    usecase "UC07\nGọi nhân viên phục vụ" as UC07
-    usecase "UC08\nYêu cầu thanh toán" as UC08
-    usecase "UC33\nChuyển bàn (Transfer)" as UC33
-    usecase "UC34\nGhép bàn & Cụm bàn (Merge)" as UC34
-    usecase "UC35\nQuản lý thiết bị & Chủ bàn" as UC35
+  package "Phân hệ Khách hàng (Gọi món & Tiện ích bàn)" {
+    usecase "UC01: Quét mã QR vào bàn" as UC01
+    usecase "UC02: Xem thực đơn" as UC02
+    usecase "UC03: Xem chi tiết món ăn" as UC03
+    usecase "UC04: Quản lý giỏ hàng chung\n(Realtime Cart)" as UC04
+    usecase "UC05: Gửi đơn gọi món" as UC05
+    usecase "UC06: Theo dõi trạng thái món ăn" as UC06
+    usecase "UC07: Gọi nhân viên phục vụ" as UC07
+    usecase "UC08: Yêu cầu thanh toán" as UC08
+    usecase "UC33: Xác thực mật mã bàn\n(Table Passcode PIN)" as UC33
+    usecase "UC34: Chuyển bàn / Ghép bàn\ntừ phía Khách hàng" as UC34
+    usecase "UC37: Quản lý thiết bị kết nối\n& Chuyển Host" as UC37
   }
 
-  package "Chức năng dùng chung (Nhân sự)" {
-    usecase "UC09\nĐăng nhập hệ thống quản trị" as UC09
-    usecase "UC20\nĐăng xuất" as UC20
+  package "Chức năng Dùng chung (Xác thực nhân sự)" {
+    usecase "UC09: Đăng nhập hệ thống quản trị" as UC09
+    usecase "UC20: Đăng xuất" as UC20
   }
 
-  package "Chức năng Quản lý" {
-    usecase "UC10\nQuản lý thực đơn" as UC10
-    usecase "UC11\nQuản lý bàn ăn" as UC11
-    usecase "UC12\nXem sơ đồ tổng quát bàn ăn" as UC12
-    usecase "UC13\nCan thiệp & điều chỉnh order" as UC13
-    usecase "UC14\nTiếp nhận gọi NV / thanh toán" as UC14
-    usecase "UC15\nXác nhận thanh toán & đóng bàn" as UC15
-    usecase "UC16\nXem thống kê doanh thu" as UC16
-    usecase "UC36\nQuản lý nhân sự & phân quyền" as UC36
-    usecase "UC37\nQuản lý hóa đơn & đối soát" as UC37
+  package "Phân hệ Quản trị & Vận hành (Admin / Manager)" {
+    usecase "UC10: Quản lý thực đơn" as UC10
+    usecase "UC11: Quản lý bàn ăn" as UC11
+    usecase "UC12: Xem sơ đồ tổng quát bàn ăn" as UC12
+    usecase "UC13: Can thiệp & điều chỉnh order" as UC13
+    usecase "UC15: Xác nhận thanh toán & đóng bàn" as UC15
+    usecase "UC16: Xem thống kê doanh thu" as UC16
+    usecase "UC39: Quản lý Tài khoản & Phân quyền" as UC39
+    usecase "UC40: Tra cứu Lịch sử Hóa đơn & Phân tích" as UC40
+    usecase "UC41: Tải ảnh món ăn lên Cloudinary CDN" as UC41
+    usecase "UC42: In hàng loạt Thẻ mã QR Bàn ăn" as UC42
   }
 
-  package "Chức năng Bếp" {
-    usecase "UC17\nXem danh sách món cần chế biến" as UC17
-    usecase "UC18\nCập nhật trạng thái chế biến món" as UC18
-    usecase "UC19\nBáo hết món khẩn cấp" as UC19
+  package "Phân hệ Bếp KDS (Kitchen Display System)" {
+    usecase "UC17: Xem danh sách món cần chế biến" as UC17
+    usecase "UC18: Cập nhật trạng thái chế biến món" as UC18
+    usecase "UC19: Báo hết món khẩn cấp" as UC19
   }
 
-  package "Chức năng Phục vụ" {
-    usecase "UC38\nTiếp nhận phục vụ & giao món" as UC38
+  package "Phân hệ Phục vụ & Điều phối Sảnh (Waiter)" {
+    usecase "UC14: Tiếp nhận gọi nhân viên/thanh toán" as UC14
+    usecase "UC35: Chuyển bàn / Ghép bàn trực tiếp từ POS" as UC35
+    usecase "UC36: Quản lý Cụm Bàn Liên Kết (Master - Slave)" as UC36
+    usecase "UC38: Màn hình Tiếp thực / Điều phối bưng món" as UC38
   }
 }
 
+' Liên kết Actor Khách hàng
 KH --> UC01
 KH --> UC02
 KH --> UC03
@@ -81,8 +90,9 @@ KH --> UC07
 KH --> UC08
 KH --> UC33
 KH --> UC34
-KH --> UC35
+KH --> UC37
 
+' Liên kết Actor Quản lý / Admin
 QL --> UC09
 QL --> UC10
 QL --> UC11
@@ -93,159 +103,188 @@ QL --> UC15
 QL --> UC16
 QL --> UC20
 QL --> UC33
-QL --> UC34
 QL --> UC35
 QL --> UC36
 QL --> UC37
+QL --> UC39
+QL --> UC40
+QL --> UC41
+QL --> UC42
 
+' Liên kết Actor Bếp
 NVB --> UC09
 NVB --> UC17
 NVB --> UC18
 NVB --> UC19
 NVB --> UC20
 
+' Liên kết Actor Phục vụ
 NVPV --> UC09
 NVPV --> UC14
-NVPV --> UC15
 NVPV --> UC20
+NVPV --> UC35
+NVPV --> UC36
 NVPV --> UC38
 
+' Quan hệ phụ thuộc chính
+UC01 ..> UC33 : <<include>>
 UC05 ..> UC04 : <<include>>
 UC08 ..> UC04 : <<include>>
 UC14 ..> UC07 : <<extend>>
 UC14 ..> UC08 : <<extend>>
 UC38 ..> UC18 : <<extend>>
+UC41 ..> UC10 : <<extend>>
+UC42 ..> UC11 : <<extend>>
 @enduml
 ```
 
-**Bảng 1: Bảng Use Case tổng quát**
+**Bảng 1: Bảng danh mục Use Case tổng quát (Chuẩn hóa theo UC-new.pdf)**
 
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
+| Mã UC | Tên Use Case | Actor chính | Mô tả chuẩn hóa (theo UC-new.pdf) |
 |---|---|---|---|
-| UC01 | Quét mã QR vào bàn | Khách hàng | Khách quét mã QR dán tại bàn để xác thực phiên order (session_token) đúng bàn của mình. |
-| UC02 | Xem thực đơn | Khách hàng | Duyệt danh sách món ăn theo danh mục (Nước lẩu, Thịt bò, Hải sản, Rau nấm, Thức uống, Bán chạy...). |
-| UC03 | Xem chi tiết món ăn | Khách hàng | Xem ảnh phóng to, mô tả nguyên liệu/hương vị, giá và tình trạng còn/hết của một món cụ thể. |
-| UC04 | Quản lý giỏ hàng chung (Realtime Cart) | Khách hàng | Phân hệ giỏ hàng dùng chung cho cả bàn, đồng bộ realtime; gồm thêm món (UC21), điều chỉnh số lượng (UC22), xem giỏ hàng & tổng tiền (UC23). |
-| UC05 | Gửi đơn gọi món | Khách hàng | Chốt các món trong giỏ hàng, gửi một đợt order (Order Round) vào bếp. |
-| UC06 | Theo dõi trạng thái món ăn | Khách hàng | Theo dõi realtime trạng thái từng món đã gọi (Đang chuẩn bị/Đã phục vụ/Đã hủy). |
-| UC07 | Gọi nhân viên phục vụ | Khách hàng | Bấm chuông gọi nhân viên (xin nước đá, chén đũa, hỗ trợ...). |
-| UC08 | Yêu cầu thanh toán | Khách hàng | Gửi yêu cầu thanh toán tới Quản lý kèm hóa đơn tạm tính của bàn. |
-| UC09 | Đăng nhập hệ thống quản trị | Quản lý, Nhân viên Bếp, Phục vụ | Xác thực tài khoản nhân sự bằng Email/Username và mật khẩu để cấp JWT Token, phân quyền theo vai trò. |
-| UC10 | Quản lý thực đơn | Quản lý | Phân hệ quản lý món ăn (UC24), danh mục (UC25) và trạng thái còn/hết hàng (UC26). |
-| UC11 | Quản lý bàn ăn | Quản lý | Phân hệ quản lý danh sách bàn (UC27), cấp lại mã QR (UC28) và khóa/mở quyền order của bàn (UC29). |
-| UC12 | Xem sơ đồ tổng quát bàn ăn | Quản lý | Xem bản đồ trực quan toàn bộ bàn (trạng thái màu sắc, thời gian ngồi, tạm tính). |
-| UC13 | Can thiệp & điều chỉnh order khách hàng | Quản lý | Sửa số lượng, đổi món, hủy món trong order của khách khi có sự cố. |
-| UC14 | Tiếp nhận yêu cầu gọi nhân viên/thanh toán | Quản lý, Phục vụ | Nhận và xử lý các cảnh báo chuông gọi phục vụ (UC07) hoặc yêu cầu thanh toán (UC08) từ khách. |
-| UC15 | Xác nhận thanh toán & đóng bàn | Quản lý, Phục vụ | Phân hệ chốt hóa đơn cho bàn, gồm thanh toán tiền mặt (UC30), VietQR (UC31) và in hóa đơn & đóng bàn (UC32). |
-| UC16 | Xem thống kê doanh thu | Quản lý | Xem báo cáo, biểu đồ doanh thu theo Giờ/Ngày/Tuần/Tháng và Top món bán chạy. |
-| UC17 | Xem danh sách món cần chế biến | Nhân viên Bếp | Xem danh sách món cần nấu, sắp xếp theo nguyên tắc FIFO (thời gian gọi). |
-| UC18 | Cập nhật trạng thái chế biến món | Nhân viên Bếp | Chuyển trạng thái món từ "Đang chuẩn bị" sang "Đã phục vụ". |
-| UC19 | Báo hết món khẩn cấp | Nhân viên Bếp | Tắt nhanh một món khi cạn nguyên liệu giữa ca, khóa món trên thực đơn khách ngay lập tức. |
-| UC20 | Đăng xuất | Quản lý, Nhân viên Bếp, Phục vụ | Đăng xuất khỏi hệ thống quản trị/KDS, xóa Token phiên hiện tại. |
-| UC33 | Chuyển bàn (Table Transfer 1:1) | Khách hàng (Host), Quản lý | Chuyển toàn bộ đợt order và giỏ hàng từ bàn cũ sang bàn mới còn trống, áp dụng 2-Phase Lock. |
-| UC34 | Ghép bàn & Cụm bàn (Table Merge N:1) | Khách hàng (Host), Quản lý | Ghép bàn phụ vào bàn chính cho đoàn tiệc lớn, hợp nhất hóa đơn thanh toán tập trung. |
-| UC35 | Quản lý thiết bị & Phân quyền Chủ Bàn | Khách hàng (Host), Quản lý | Quét QR, nhập PIN 4 số, chống Brute-force, gán quyền Host, nhường Host và đá thiết bị lạ. |
-| UC36 | Quản lý tài khoản nhân sự | Quản trị viên (Admin) | Thêm mới nhân viên, phân vai trò ADMIN/MANAGER/KITCHEN/STAFF, khóa tài khoản, gửi email. |
-| UC37 | Quản lý hóa đơn & Đối soát | Quản lý | Tra cứu lịch sử hóa đơn theo ngày, phương thức thanh toán, xem chi tiết món ăn, in lại hóa đơn. |
-| UC38 | Tiếp nhận phục vụ & giao món tại sảnh | Nhân viên Phục vụ | Theo dõi danh sách món nấu xong cần bưng ra bàn, xác nhận đã giao món, thu tiền mặt tại chỗ. |
+| **UC01** | Quét mã QR vào bàn | Khách hàng | Khách quét mã QR và nhập mã Passcode PIN 4 số của bàn để xác thực và cấp mã phiên (session_token, device_token), bảo đảm bảo mật trước khi vào menu gọi món. |
+| **UC02** | Xem thực đơn | Khách hàng | Khách hàng duyệt thực đơn theo các thẻ danh mục, tìm kiếm món ăn, lọc theo tag (bán chạy, cay, chay...), hiển thị hình ảnh và đơn giá. |
+| **UC03** | Xem chi tiết món ăn | Khách hàng | Xem chi tiết từng món ăn gồm ảnh sắc nét, mô tả nguyên liệu, độ cay, giá tiền và trạng thái còn món hay tạm hết. |
+| **UC04** | Quản lý giỏ hàng chung (Realtime Cart) | Khách hàng | Giỏ hàng chung đồng bộ thời gian thực giữa mọi thiết bị đang cùng ngồi tại bàn (thêm món, chỉnh số lượng, ghi chú, tính tổng tiền tạm tính). |
+| **UC05** | Gửi đơn gọi món | Khách hàng | Khách chốt các món trong giỏ hàng, gửi một đợt gọi món mới (Order Round) vào màn hình POS Bếp, tự động làm rỗng giỏ hàng và phát WebSocket. |
+| **UC06** | Theo dõi trạng thái món ăn | Khách hàng | Khách theo dõi danh sách tất cả các đợt gọi món của bàn và tiến độ từng món (Đang chế biến -> Đã phục vụ -> Đã bưng ra bàn / Hết món) cập nhật theo thời gian thực. |
+| **UC07** | Gọi nhân viên phục vụ | Khách hàng | Khách bấm chuông gọi nhân viên chọn lý do cụ thể (Xin nước đá, Thêm nước lẩu, Lấy chén đũa, Hỗ trợ khác), gửi thông báo tới Waiter và Manager. |
+| **UC08** | Yêu cầu thanh toán | Khách hàng | Khách xem hóa đơn tạm tính và gửi tín hiệu yêu cầu thanh toán về quầy thu ngân / POS quản lý, bàn chuyển sang trạng thái chờ bill (BILL_REQUESTED). |
+| **UC09** | Đăng nhập hệ thống quản trị | Admin, Manager, Kitchen, Waiter | Đăng nhập tài khoản nội bộ (Admin, Manager, Kitchen, Waiter) bằng Email và Mật khẩu, cấp JWT token và điều hướng về phân hệ được phân quyền. |
+| **UC10** | Quản lý thực đơn | Admin, Manager | Phân hệ toàn diện quản lý món ăn, phân nhóm danh mục và công tắc bật/tắt trạng thái phục vụ còn/hết món. |
+| **UC11** | Quản lý bàn ăn | Admin, Manager | Quản lý thông tin bàn, thiết lập khu vực, tạo mã QR, cấp lại PIN xoay vòng và khóa/mở quyền gọi món khẩn cấp. |
+| **UC12** | Xem sơ đồ tổng quát bàn ăn | Admin, Manager | Bản đồ sơ đồ bàn ăn trực quan theo từng khu vực (Tầng trệt, Tầng 1, VIP...), mã màu theo trạng thái (Trống, Đang ăn, Chờ bill, Đang dọn), hiển thị thời lượng ngồi và tiền tạm tính. |
+| **UC13** | Can thiệp & điều chỉnh order khách hàng | Admin, Manager | Sửa số lượng, đổi món, hủy món trong order của khách khi có sự cố. (Hiện tại mã nguồn chưa triển khai tính năng Quản lý sửa đổi các đợt order đã chốt gửi bếp). |
+| **UC14** | Tiếp nhận yêu cầu gọi nhân viên/thanh toán | Waiter, Manager, Admin | Tiếp nhận chuông báo và xử lý yêu cầu phục vụ / yêu cầu tính tiền từ khách hàng trên màn hình Waiter và sơ đồ bàn Manager/Admin, hỗ trợ đánh dấu đã xử lý xong. |
+| **UC15** | Xác nhận thanh toán & đóng bàn | Admin, Manager | Chốt hóa đơn thanh toán cho bàn bằng Tiền mặt hoặc VietQR, tự động đóng phiên bàn, sinh mã PIN mới và chuyển bàn sang trạng thái dọn dẹp. |
+| **UC16** | Xem thống kê doanh thu | Admin, Manager | Báo cáo doanh thu, chỉ số KPI (doanh thu, số lượt khách, giá trị trung bình đơn), biểu đồ doanh thu theo Ngày/Tuần/Tháng/Năm/Tùy chọn và Top 5 món bán chạy nhất. |
+| **UC17** | Xem danh sách món cần chế biến | Kitchen, Manager | Màn hình POS Bếp (KDS) hiển thị danh sách các đợt gọi món sắp xếp theo chuẩn FIFO, hỗ trợ xem theo từng đợt order hoặc xem tổng hợp (Aggregated View). |
+| **UC18** | Cập nhật trạng thái chế biến món | Kitchen, Manager | Người điều phối ở Bếp cập nhật trạng thái món từ Đang nấu (COOKING) sang Đã chuẩn bị xong (SERVED) cho từng món lẻ hoặc hoàn tất cả đợt gọi. |
+| **UC19** | Báo hết món khẩn cấp | Kitchen, Manager | Bếp KDS báo hết món khẩn cấp: Tự động khóa món trên menu khách hàng (SOLD OUT), tự động gỡ món khỏi tất cả bàn đang đặt và bắn thông báo thời gian thực; có hỗ trợ mở bán lại (restock). |
+| **UC20** | Đăng xuất | Admin, Manager, Kitchen, Waiter | Người dùng nội bộ đăng xuất khỏi tài khoản, hệ thống hủy phiên đăng nhập, xóa JWT trong bộ nhớ/localStorage và đưa về trang Login. |
+| **UC21** | Thêm món vào giỏ hàng | Khách hàng | Chọn món và tùy chỉnh số lượng từ danh sách thực đơn đưa vào giỏ hàng chung của bàn. |
+| **UC22** | Điều chỉnh số lượng món trong giỏ | Khách hàng | Tăng, giảm số lượng hoặc bấm nút xóa từng món đang chờ gửi bếp trong giỏ hàng chung. |
+| **UC23** | Xem giỏ hàng & tổng hóa đơn tạm tính | Khách hàng | Mở xem chi tiết các món trong giỏ hàng hiện tại, các món đã gửi qua các đợt gọi trước và tổng tiền tạm tính tương ứng. |
+| **UC24** | Quản lý danh sách món ăn | Admin, Manager | Thêm mới, cập nhật giá, mô tả, hình ảnh (upload Cloudinary), thuộc tính danh mục và xóa món ăn khỏi thực đơn. |
+| **UC25** | Quản lý danh mục món ăn | Admin, Manager | Thêm mới, cập nhật tên/mô tả danh mục, bật/tắt hiển thị danh mục và gán món ăn vào danh mục tương ứng. |
+| **UC26** | Cập nhật trạng thái Còn hàng/Hết hàng | Admin, Manager | Toggle bật/tắt nhanh trạng thái còn hàng hoặc hết hàng của món ăn từ trang quản trị thực đơn. |
+| **UC27** | Quản lý danh sách bàn ăn | Admin, Manager | Tạo mới bàn, cập nhật tên bàn, khu vực (Tầng trệt, Tầng 1, VIP...), sức chứa chỗ ngồi tối đa. |
+| **UC28** | Cấp lại mã QR cho bàn | Admin, Manager | Sinh lại mã PIN 4 số và thu hồi token phiên cũ của bàn, hỗ trợ xem và in lại tem mã QR mới dán tại bàn. |
+| **UC29** | Bật/tắt quyền order của bàn | Admin, Manager | Khóa hoặc mở khóa quyền gọi món khẩn cấp của bàn (is_order_locked) để tạm dừng hoặc cho phép khách tiếp tục gọi món. |
+| **UC30** | Thanh toán bằng tiền mặt | Admin, Manager | Chọn thanh toán tiền mặt, nhập tiền khách đưa, tính tiền thừa và xác nhận hoàn tất hóa đơn. |
+| **UC31** | Thanh toán bằng VietQR | Admin, Manager | Hiển thị mã VietQR động chuẩn Napas247 kèm số tài khoản, số tiền và nội dung hóa đơn để khách quét thanh toán chuyển khoản ngân hàng. |
+| **UC32** | In hóa đơn & đóng bàn | Admin, Manager | Lưu thông tin hóa đơn vào cơ sở dữ liệu, in hóa đơn nhiệt khổ 80mm cho khách, đóng phiên và chuyển trạng thái bàn sang dọn dẹp (CLEANING). |
+| **UC33** | Xác thực mật mã bàn (Table Passcode PIN) | Khách hàng, Manager, Admin | Khách sau khi quét mã QR bàn phải nhập mã PIN 4 số bảo mật của bàn để được cấp quyền gọi món (tránh quét nhầm hoặc chụp lén QR gọi bậy). Quản lý có thể xem/đổi mã PIN. |
+| **UC34** | Chuyển bàn / Ghép bàn từ phía Khách hàng | Khách hàng | Chủ bàn tạo yêu cầu chuyển hoặc ghép bàn (mã xác nhận TTL 5 phút), sang bàn đích nhập mã để chuyển toàn bộ giỏ hàng và đơn đã gọi sang bàn mới. |
+| **UC35** | Chuyển bàn / Ghép bàn trực tiếp từ POS | Waiter, Manager, Admin | Nhân viên hoặc Quản lý thực hiện Chuyển bàn (Move) hoặc Ghép bàn (Merge) trực tiếp trên giao diện POS/Admin mà không cần khách thao tác mã chuyển. |
+| **UC36** | Quản lý Cụm Bàn Liên Kết (Master - Slave) | Waiter, Manager, Admin | Hỗ trợ gộp nhiều bàn phụ (Slave) vào một bàn chính (Master) khi phục vụ các đoàn tiệc đông người; gom hóa đơn về bàn Master và có thể tách bàn phụ (unlink) ra khi cần. |
+| **UC37** | Quản lý thiết bị kết nối vào bàn & Chuyển Host | Khách hàng, Manager, Admin | Xem danh sách thiết bị đang kết nối vào bàn; Chủ bàn (Host) có thể chuyển quyền Host cho thiết bị khác hoặc kick thiết bị lạ; Quản lý cũng có quyền xem và kick thiết bị từ POS. |
+| **UC38** | Màn hình Tiếp thực / Điều phối phục vụ bưng món | Waiter, Manager | Màn hình chuyên dụng cho nhân viên phục vụ, hiển thị danh sách các món ăn bếp đã làm xong (SERVED) cần bưng ra bàn, hỗ trợ xác nhận đã bưng món (DELIVERED) theo từng món hoặc cả đợt gọi. |
+| **UC39** | Quản lý Tài khoản & Phân quyền Nhân viên | Admin | Quản lý toàn bộ nhân viên nhà hàng: Thêm mới, cập nhật thông tin, kích hoạt/khóa tài khoản, cấp lại mật khẩu, phân vai trò (ADMIN, MANAGER, KITCHEN, WAITER, STAFF) và cấu hình chi tiết danh sách quyền hạn module. |
+| **UC40** | Tra cứu Lịch sử Hóa đơn & Phân tích chi tiết | Manager, Admin | Tra cứu và lọc danh sách hóa đơn theo từ khóa, phương thức thanh toán (Tiền mặt / Chuyển khoản), trạng thái và khoảng ngày; xem chi tiết cơ cấu từng hóa đơn đã thanh toán. |
+| **UC41** | Tải ảnh món ăn lên Cloudinary CDN | Manager, Admin | Hỗ trợ chọn tệp ảnh trực tiếp từ máy tính khi tạo/sửa món ăn, tải lên Cloudinary CDN và gắn URL ảnh tự động vào thực đơn. |
+| **UC42** | In hàng loạt Thẻ mã QR Bàn ăn | Manager, Admin | Trang quản lý hiển thị danh sách thẻ bàn kèm QR Code và mã Passcode, hỗ trợ in ấn hàng loạt thẻ để dán lên từng bàn ăn. |
 
 ---
 
 ### 3.1.2 Lược đồ Use Case chi tiết
 
-#### 3.1.2.1 Lược đồ Giỏ hàng & Gọi món
+#### 3.1.2.1 Lược đồ Giỏ hàng & Gọi món (Realtime Cart)
 
 **Hình 2: Lược đồ use case Giỏ hàng & Gọi món**
 
 ```plantuml
 @startuml uc-gio-hang-goi-mon
 title uc Gio hang & Goi mon
-
 actor "Khách hàng\n(tại bàn)" as KH
 
-usecase "Quản lý giỏ hàng chung\n(Realtime Cart)" as UC04
-usecase "Thêm món vào giỏ hàng" as UC21
-usecase "Điều chỉnh số lượng món\ntrong giỏ" as UC22
-usecase "Xem giỏ hàng &\ntổng hóa đơn tạm tính" as UC23
+usecase "UC04: Quản lý giỏ hàng chung\n(Realtime Cart)" as UC04
+usecase "UC21: Thêm món vào giỏ hàng" as UC21
+usecase "UC22: Điều chỉnh số lượng món\ntrong giỏ" as UC22
+usecase "UC23: Xem giỏ hàng &\ntổng hóa đơn tạm tính" as UC23
+usecase "UC05: Gửi đơn gọi món" as UC05
 
 KH -- UC04
+KH -- UC05
 UC21 ..> UC04 : <<extend>>
 UC22 ..> UC04 : <<extend>>
 UC23 ..> UC04 : <<extend>>
+UC05 ..> UC04 : <<include>>
 @enduml
 ```
 
-**Bảng 2: Bảng Use Case Giỏ hàng & Gọi món**
-
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
+**Bảng 2: Chú thích Use Case Giỏ hàng & Gọi món**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
 |---|---|---|---|
-| UC21 | Thêm món vào giỏ hàng | Khách hàng | Chọn món và số lượng từ thực đơn, thêm vào giỏ hàng chung của bàn. |
-| UC22 | Điều chỉnh số lượng món trong giỏ | Khách hàng | Tăng/giảm hoặc xóa một dòng món chưa gửi bếp trong giỏ hàng. |
-| UC23 | Xem giỏ hàng & tổng hóa đơn tạm tính | Khách hàng | Xem toàn bộ món (đã gửi + chưa gửi) và tổng tiền tạm tính của cả bàn. |
+| UC21 | Thêm món vào giỏ hàng | Khách hàng | Chọn món và tùy chỉnh số lượng từ danh sách thực đơn đưa vào giỏ hàng chung của bàn. |
+| UC22 | Điều chỉnh số lượng món trong giỏ | Khách hàng | Tăng, giảm số lượng hoặc bấm nút xóa từng món đang chờ gửi bếp trong giỏ hàng chung. |
+| UC23 | Xem giỏ hàng & tổng hóa đơn tạm tính | Khách hàng | Mở xem chi tiết các món trong giỏ hàng hiện tại, các món đã gửi qua các đợt gọi trước và tổng tiền tạm tính tương ứng. |
 
 ---
 
-#### 3.1.2.2 Lược đồ Quản lý thực đơn
+#### 3.1.2.2 Lược đồ Quản lý thực đơn & Hình ảnh Cloudinary CDN
 
 **Hình 3: Lược đồ use case Quản lý thực đơn**
 
 ```plantuml
 @startuml uc-quan-ly-thuc-don
-title uc Quan ly thuc don
+title uc Quan ly thuc don & Hinh anh CDN
+actor "Quản lý / Admin" as QL
 
-actor "Quản lý" as QL
-
-usecase "Quản lý thực đơn" as UC10
-usecase "Quản lý danh sách món ăn" as UC24
-usecase "Quản lý danh mục món ăn" as UC25
-usecase "Cập nhật trạng thái\nCòn hàng / Hết hàng" as UC26
+usecase "UC10: Quản lý thực đơn" as UC10
+usecase "UC24: Quản lý danh sách món ăn" as UC24
+usecase "UC25: Quản lý danh mục món ăn" as UC25
+usecase "UC26: Cập nhật trạng thái\nCòn hàng/Hết hàng" as UC26
+usecase "UC41: Tải ảnh món ăn\nlên Cloudinary CDN" as UC41
 
 QL -- UC10
 UC24 ..> UC10 : <<extend>>
 UC25 ..> UC10 : <<extend>>
 UC26 ..> UC10 : <<extend>>
+UC41 ..> UC24 : <<extend>>
 @enduml
 ```
 
-**Bảng 3: Bảng Use Case Quản lý thực đơn**
-
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
+**Bảng 3: Chú thích Use Case Quản lý thực đơn**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
 |---|---|---|---|
-| UC24 | Quản lý danh sách món ăn | Quản lý | Thêm/sửa/xóa món ăn: tên, mô tả, giá, ảnh minh họa. |
-| UC25 | Quản lý danh mục món ăn | Quản lý | Thêm/sửa/xóa danh mục và gán món ăn vào một hoặc nhiều danh mục (N-N). |
-| UC26 | Cập nhật trạng thái Còn hàng/Hết hàng | Quản lý | Bật/tắt nhanh trạng thái còn hàng của một món, đồng bộ realtime tới khách hàng. |
+| UC24 | Quản lý danh sách món ăn | Admin, Manager | Thêm mới, cập nhật giá, mô tả, hình ảnh (upload Cloudinary), thuộc tính danh mục và xóa món ăn khỏi thực đơn. |
+| UC25 | Quản lý danh mục món ăn | Admin, Manager | Thêm mới, cập nhật tên/mô tả danh mục, bật/tắt hiển thị danh mục và gán món ăn vào danh mục tương ứng. |
+| UC26 | Cập nhật trạng thái Còn hàng/Hết hàng | Admin, Manager | Toggle bật/tắt nhanh trạng thái còn hàng hoặc hết hàng của món ăn từ trang quản trị thực đơn. |
+| UC41 | Tải ảnh món ăn lên Cloudinary CDN | Admin, Manager | Hỗ trợ chọn tệp ảnh trực tiếp từ máy tính khi tạo/sửa món ăn, tải lên Cloudinary CDN và gắn URL ảnh tự động vào thực đơn. |
 
 ---
 
-#### 3.1.2.3 Lược đồ Quản lý bàn ăn & Mã QR
+#### 3.1.2.3 Lược đồ Quản lý bàn ăn & Thẻ tem mã QR
 
-**Hình 4: Lược đồ use case Quản lý bàn ăn & Mã QR**
+**Hình 4: Lược đồ use case Quản lý bàn ăn & Thẻ QR**
 
 ```plantuml
 @startuml uc-quan-ly-ban-an
-title uc Quan ly ban an & Ma QR
+title uc Quan ly ban an & The QR
+actor "Quản lý / Admin" as QL
 
-actor "Quản lý" as QL
-
-usecase "Quản lý bàn ăn" as UC11
-usecase "Quản lý danh sách bàn ăn" as UC27
-usecase "Cấp lại mã QR cho bàn" as UC28
-usecase "Bật/tắt quyền order của bàn" as UC29
+usecase "UC11: Quản lý bàn ăn" as UC11
+usecase "UC27: Quản lý danh sách bàn ăn" as UC27
+usecase "UC28: Cấp lại mã QR cho bàn" as UC28
+usecase "UC29: Bật/tắt quyền order của bàn" as UC29
+usecase "UC42: In hàng loạt Thẻ mã QR Bàn ăn" as UC42
 
 QL -- UC11
 UC27 ..> UC11 : <<extend>>
 UC28 ..> UC11 : <<extend>>
 UC29 ..> UC11 : <<extend>>
+UC42 ..> UC11 : <<extend>>
 @enduml
 ```
 
-**Bảng 4: Bảng Use Case Quản lý bàn ăn & Mã QR**
-
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
+**Bảng 4: Chú thích Use Case Quản lý bàn ăn**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
 |---|---|---|---|
-| UC27 | Quản lý danh sách bàn ăn | Quản lý | Thêm/sửa/xóa bàn ăn: mã bàn, tên hiển thị, khu vực, sức chứa tối đa. |
-| UC28 | Cấp lại mã QR cho bàn | Quản lý | Thu hồi token cũ và sinh token/QR mới cho một hoặc nhiều bàn (khi nghi lộ QR). |
-| UC29 | Bật/tắt quyền order của bàn | Quản lý | Khóa/mở cờ is_order_locked để ngăn bàn gọi thêm món khi có sự cố. |
+| UC27 | Quản lý danh sách bàn ăn | Admin, Manager | Tạo mới bàn, cập nhật tên bàn, khu vực (Tầng trệt, Tầng 1, VIP...), sức chứa chỗ ngồi tối đa. |
+| UC28 | Cấp lại mã QR cho bàn | Admin, Manager | Sinh lại mã PIN 4 số và thu hồi token phiên cũ của bàn, hỗ trợ xem và in lại tem mã QR mới dán tại bàn. |
+| UC29 | Bật/tắt quyền order của bàn | Admin, Manager | Khóa hoặc mở khóa quyền gọi món khẩn cấp của bàn (is_order_locked) để tạm dừng hoặc cho phép khách tiếp tục gọi món. |
+| UC42 | In hàng loạt Thẻ mã QR Bàn ăn | Admin, Manager | Trang quản lý hiển thị danh sách thẻ bàn kèm QR Code và mã Passcode, hỗ trợ in ấn hàng loạt thẻ để dán lên từng bàn ăn. |
 
 ---
 
@@ -256,13 +295,12 @@ UC29 ..> UC11 : <<extend>>
 ```plantuml
 @startuml uc-thanh-toan-dong-ban
 title uc Thanh toan & Dong ban
+actor "Quản lý / Thu ngân" as QL
 
-actor "Quản lý" as QL
-
-usecase "Xác nhận thanh toán\n& đóng bàn" as UC15
-usecase "Thanh toán bằng tiền mặt" as UC30
-usecase "Thanh toán bằng VietQR" as UC31
-usecase "In hóa đơn & đóng bàn" as UC32
+usecase "UC15: Xác nhận thanh toán & đóng bàn" as UC15
+usecase "UC30: Thanh toán bằng tiền mặt" as UC30
+usecase "UC31: Thanh toán bằng VietQR" as UC31
+usecase "UC32: In hóa đơn & đóng bàn" as UC32
 
 QL -- UC15
 UC30 ..> UC15 : <<extend>>
@@ -273,107 +311,142 @@ UC32 ..> UC31 : <<include>>
 @enduml
 ```
 
-**Bảng 5: Bảng Use Case Thanh toán & Đóng bàn**
-
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
+**Bảng 5: Chú thích Use Case Thanh toán & Đóng bàn**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
 |---|---|---|---|
-| UC30 | Thanh toán bằng tiền mặt | Quản lý | Ghi nhận giao dịch thanh toán bằng tiền mặt cho hóa đơn của bàn. |
-| UC31 | Thanh toán bằng VietQR | Quản lý | Sinh mã VietQR động (chuẩn Napas247) đúng số tiền hóa đơn để khách quét chuyển khoản. |
-| UC32 | In hóa đơn & đóng bàn | Quản lý | In hóa đơn nhiệt khổ 80mm, lưu doanh thu, chuyển bàn sang trạng thái dọn dẹp và thu hồi mã QR hiện tại. |
+| UC30 | Thanh toán bằng tiền mặt | Admin, Manager | Chọn thanh toán tiền mặt, nhập tiền khách đưa, tính tiền thừa và xác nhận hoàn tất hóa đơn. |
+| UC31 | Thanh toán bằng VietQR | Admin, Manager | Hiển thị mã VietQR động chuẩn Napas247 kèm số tài khoản, số tiền và nội dung hóa đơn để khách quét thanh toán chuyển khoản ngân hàng. |
+| UC32 | In hóa đơn & đóng bàn | Admin, Manager | Lưu thông tin hóa đơn vào cơ sở dữ liệu, in hóa đơn nhiệt khổ 80mm cho khách, đóng phiên và chuyển trạng thái bàn sang dọn dẹp (CLEANING). |
 
 ---
 
-#### 3.1.2.5 Lược đồ Điều chuyển bàn & Cụm bàn
+#### 3.1.2.5 Lược đồ Xác thực PIN & Quản lý thiết bị phiên bàn ăn
 
-**Hình 6: Lược đồ use case Điều chuyển bàn & Cụm bàn**
-
-```plantuml
-@startuml uc-chuyen-ghep-ban
-title uc Dieu chuyen ban & Cum ban
-
-actor "Khách hàng (Host)" as KH
-actor "Quản lý / Thu ngân" as QL
-
-usecase "Chuyển bàn (Transfer 1:1)" as UC33
-usecase "Ghép bàn & Cụm bàn (Merge N:1)" as UC34
-
-KH -- UC33
-KH -- UC34
-QL -- UC33
-QL -- UC34
-
-UC34 ..> UC33 : <<extend>>
-@enduml
-```
-
-**Bảng 6: Bảng Use Case Điều chuyển bàn & Cụm bàn**
-
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
-|---|---|---|---|
-| UC33 | Chuyển bàn (Table Move / Transfer 1:1) | Khách hàng (Host), Quản lý | Di chuyển toàn bộ đợt order và giỏ hàng từ bàn cũ sang bàn mới trống, áp dụng khóa tạm thời 2 giai đoạn (2-Phase Lock). |
-| UC34 | Ghép bàn & Cụm bàn (Table Merge & Cluster N:1) | Khách hàng (Host), Quản lý | Ghép bàn phụ (Slave) vào bàn chính (Master) cho đoàn tiệc đông người, gom chung order và thanh toán tập trung. |
-
----
-
-#### 3.1.2.6 Lược đồ Quản lý thiết bị & Phiên bàn ăn
-
-**Hình 7: Lược đồ use case Quản lý thiết bị & Phiên bàn ăn**
+**Hình 6: Lược đồ use case Xác thực PIN & Quản lý thiết bị**
 
 ```plantuml
-@startuml uc-quan-ly-thiet-bi
-title uc Quan ly thiet bi & Phien ban an
-
-actor "Khách hàng (Host)" as KH
+@startuml uc-xac-thuc-thiet-bi
+title uc Xac thuc PIN & Quan ly thiet bi
+actor "Khách hàng" as KH
 actor "Quản lý / Admin" as QL
 
-usecase "Quản lý thiết bị & Chủ bàn" as UC35
+usecase "UC33: Xác thực mật mã bàn\n(Table Passcode PIN)" as UC33
+usecase "UC37: Quản lý thiết bị kết nối\nvào bàn & Chuyển Host" as UC37
 
-KH -- UC35
-QL -- UC35
+KH -- UC33
+KH -- UC37
+QL -- UC33
+QL -- UC37
 @enduml
 ```
 
-**Bảng 7: Bảng Use Case Quản lý thiết bị & Phiên bàn ăn**
-
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
+**Bảng 6: Chú thích Use Case Xác thực PIN & Thiết bị**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
 |---|---|---|---|
-| UC35 | Quản lý thiết bị & Phân quyền Chủ bàn | Khách hàng (Host), Quản lý | Xác thực PIN 4 số chống Brute-force (khóa 60s), phân quyền Chủ Bàn (Host) vs Thành viên (Member), đá thiết bị lạ và nhường Host. |
+| UC33 | Xác thực mật mã bàn (Table Passcode PIN) | Khách hàng, Manager, Admin | Khách sau khi quét mã QR bàn phải nhập mã PIN 4 số bảo mật của bàn để được cấp quyền gọi món (tránh quét nhầm hoặc chụp lén QR gọi bậy). Quản lý có thể xem/đổi mã PIN. |
+| UC37 | Quản lý thiết bị kết nối vào bàn & Chuyển Host | Khách hàng, Manager, Admin | Xem danh sách thiết bị đang kết nối vào bàn; Chủ bàn (Host) có thể chuyển quyền Host cho thiết bị khác hoặc kick thiết bị lạ; Quản lý cũng có quyền xem và kick thiết bị từ POS. |
 
 ---
 
-#### 3.1.2.7 Lược đồ Quản trị nhân sự, Hóa đơn & Phục vụ sảnh
+#### 3.1.2.6 Lược đồ Điều chuyển bàn, Ghép bàn & Cụm bàn liên kết
 
-**Hình 8: Lược đồ use case Quản trị nhân sự, Hóa đơn & Phục vụ sảnh**
+**Hình 7: Lược đồ use case Điều chuyển & Cụm bàn liên kết**
 
 ```plantuml
-@startuml uc-nhan-su-hoa-don-phuc-vu
-title uc Quan tri nhan su, Hoa don & Phuc vu
-
-actor "Quản trị viên (Admin)" as ADMIN
-actor "Quản lý" as QL
+@startuml uc-dieu-chuyen-cum-ban
+title uc Dieu chuyen ban & Cum ban
+actor "Khách hàng (Host)" as KH
 actor "Nhân viên Phục vụ" as NVPV
+actor "Quản lý / Admin" as QL
 
-usecase "Quản lý tài khoản nhân sự" as UC36
-usecase "Quản lý hóa đơn & đối soát" as UC37
-usecase "Tiếp nhận phục vụ & giao món" as UC38
+usecase "UC34: Chuyển bàn / Ghép bàn\ntừ phía Khách hàng" as UC34
+usecase "UC35: Chuyển bàn / Ghép bàn\ntrực tiếp từ POS" as UC35
+usecase "UC36: Quản lý Cụm Bàn Liên Kết\n(Master - Slave)" as UC36
 
-ADMIN -- UC36
-QL -- UC37
-NVPV -- UC38
+KH -- UC34
+NVPV -- UC35
+NVPV -- UC36
+QL -- UC35
+QL -- UC36
 @enduml
 ```
 
-**Bảng 8: Bảng Use Case Quản trị nhân sự, Hóa đơn & Phục vụ sảnh**
-
-| Mã UC | Tên Use Case | Actor chính | Mô tả ngắn |
+**Bảng 7: Chú thích Use Case Điều chuyển & Cụm bàn liên kết**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
 |---|---|---|---|
-| UC36 | Quản lý tài khoản nhân sự | Quản trị viên (Admin) | Quản lý hồ sơ nhân viên, phân quyền ADMIN/MANAGER/KITCHEN/STAFF, bật/tắt trạng thái, gửi email chào mừng. |
-| UC37 | Quản lý hóa đơn & Đối soát doanh thu | Quản lý | Tra cứu lịch sử hóa đơn theo ngày, lọc theo trạng thái/phương thức, xem chi tiết đợt order của bàn. |
-| UC38 | Tiếp nhận phục vụ & giao món tại sảnh | Nhân viên Phục vụ | Tiếp nhận chuông gọi phục vụ, theo dõi món nấu xong từ bếp và xác nhận bưng ra bàn, thu tiền mặt. |
+| UC34 | Chuyển bàn / Ghép bàn từ phía Khách hàng | Khách hàng | Chủ bàn tạo yêu cầu chuyển hoặc ghép bàn (mã xác nhận TTL 5 phút), sang bàn đích nhập mã để chuyển toàn bộ giỏ hàng và đơn đã gọi sang bàn mới. |
+| UC35 | Chuyển bàn / Ghép bàn trực tiếp từ POS | Waiter, Manager, Admin | Nhân viên hoặc Quản lý thực hiện Chuyển bàn (Move) hoặc Ghép bàn (Merge) trực tiếp trên giao diện POS/Admin mà không cần khách thao tác mã chuyển. |
+| UC36 | Quản lý Cụm Bàn Liên Kết (Master - Slave) | Waiter, Manager, Admin | Hỗ trợ gộp nhiều bàn phụ (Slave) vào một bàn chính (Master) khi phục vụ các đoàn tiệc đông người; gom hóa đơn về bàn Master và có thể tách bàn phụ (unlink) ra khi cần. |
 
 ---
 
-## 3.2 Đặc tả Use Case
+#### 3.1.2.7 Lược đồ Bếp KDS & Màn hình Tiếp thực Phục vụ
+
+**Hình 8: Lược đồ use case Bếp KDS & Màn hình Phục vụ**
+
+```plantuml
+@startuml uc-bep-kds-phuc-vu
+title uc Bep KDS & Tiep thuc Phuc vu
+actor "Nhân viên Bếp" as NVB
+actor "Nhân viên Phục vụ" as NVPV
+actor "Quản lý / Admin" as QL
+
+usecase "UC17: Xem danh sách món cần chế biến" as UC17
+usecase "UC18: Cập nhật trạng thái chế biến món" as UC18
+usecase "UC19: Báo hết món khẩn cấp" as UC19
+usecase "UC38: Màn hình Tiếp thực /\nĐiều phối phục vụ bưng món" as UC38
+
+NVB -- UC17
+NVB -- UC18
+NVB -- UC19
+NVPV -- UC38
+QL -- UC17
+QL -- UC18
+QL -- UC19
+QL -- UC38
+
+UC38 ..> UC18 : <<extend>>
+@enduml
+```
+
+**Bảng 8: Chú thích Use Case Bếp KDS & Phục vụ**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
+|---|---|---|---|
+| UC17 | Xem danh sách món cần chế biến | Kitchen, Manager | Màn hình POS Bếp (KDS) hiển thị danh sách các đợt gọi món sắp xếp theo chuẩn FIFO, hỗ trợ xem theo từng đợt order hoặc xem tổng hợp (Aggregated View). |
+| UC18 | Cập nhật trạng thái chế biến món | Kitchen, Manager | Người điều phối ở Bếp cập nhật trạng thái món từ Đang nấu (COOKING) sang Đã chuẩn bị xong (SERVED) cho từng món lẻ hoặc hoàn tất cả đợt gọi. |
+| UC19 | Báo hết món khẩn cấp | Kitchen, Manager | Bếp KDS báo hết món khẩn cấp: Tự động khóa món trên menu khách hàng (SOLD OUT), tự động gỡ món khỏi tất cả bàn đang đặt và bắn thông báo thời gian thực; có hỗ trợ mở bán lại (restock). |
+| UC38 | Màn hình Tiếp thực / Điều phối phục vụ bưng món | Waiter, Manager | Màn hình chuyên dụng cho nhân viên phục vụ, hiển thị danh sách các món ăn bếp đã làm xong (SERVED) cần bưng ra bàn, hỗ trợ xác nhận đã bưng món (DELIVERED) theo từng món hoặc cả đợt gọi. |
+
+---
+
+#### 3.1.2.8 Lược đồ Quản trị nhân sự & Tra cứu Lịch sử hóa đơn
+
+**Hình 9: Lược đồ use case Quản trị nhân sự & Lịch sử hóa đơn**
+
+```plantuml
+@startuml uc-nhan-su-hoa-don
+title uc Nhan su & Lich su hoa don
+actor "Quản trị viên (Admin)" as ADMIN
+actor "Quản lý (Manager)" as QL
+
+usecase "UC39: Quản lý Tài khoản\n& Phân quyền Nhân viên" as UC39
+usecase "UC40: Tra cứu Lịch sử Hóa đơn\n& Phân tích chi tiết" as UC40
+
+ADMIN -- UC39
+ADMIN -- UC40
+QL -- UC40
+@enduml
+```
+
+**Bảng 9: Chú thích Use Case Quản trị nhân sự & Lịch sử hóa đơn**
+| Mã UC | Tên Use Case | Actor chính | Mô tả tóm tắt |
+|---|---|---|---|
+| UC39 | Quản lý Tài khoản & Phân quyền Nhân viên | Admin | Quản lý toàn bộ nhân viên nhà hàng: Thêm mới, cập nhật thông tin, kích hoạt/khóa tài khoản, cấp lại mật khẩu, phân vai trò (ADMIN, MANAGER, KITCHEN, WAITER, STAFF) và cấu hình chi tiết danh sách quyền hạn module. |
+| UC40 | Tra cứu Lịch sử Hóa đơn & Phân tích chi tiết | Manager, Admin | Tra cứu và lọc danh sách hóa đơn theo từ khóa, phương thức thanh toán (Tiền mặt / Chuyển khoản), trạng thái và khoảng ngày; xem chi tiết cơ cấu từng hóa đơn đã thanh toán. |
+
+---
+
+## 3.2 Đặc tả Use Case Chi Tiết (UC01 – UC42)
 
 ### 3.2.1 UC01: Quét mã QR vào bàn
 
@@ -381,17 +454,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC01 |
 | Use Case Name | Quét mã QR vào bàn |
-| Description | Là khách hàng, tôi muốn quét mã QR dán tại bàn để vào đúng phiên order của bàn mình mà không cần đăng ký tài khoản. |
+| Description | Khách quét mã QR và nhập mã Passcode PIN 4 số của bàn để xác thực và cấp mã phiên (session_token, device_token), bảo đảm bảo mật trước khi vào menu gọi món. |
 | Actor(s) | Khách hàng |
 | Priority | Must have |
 | Trigger | Khách hàng dùng camera điện thoại quét mã QR dán tại bàn. |
-| Pre-Condition(s) | Mã QR của bàn còn hiệu lực (chưa bị thu hồi). |
-| Post-Condition(s) | Trình duyệt được xác thực đúng bàn qua session_token; trang thực đơn/order của đúng bàn hiển thị; nếu bàn đang trống thì chuyển sang trạng thái "Đang có khách". |
-| Basic Flow | 1. Khách hàng quét mã QR, mã chứa URL dạng `https://domain.com/order?table={id}&token={session_token}`.<br>2. Trình duyệt điều hướng tới URL, gửi yêu cầu xác thực token với server.<br>3. Hệ thống đối chiếu token với current_session_token đang hiệu lực của bàn.<br>4. Nếu bàn đang ở trạng thái "Bàn trống" (AVAILABLE), hệ thống tự chuyển sang "Đang có khách" (OCCUPIED) và ghi nhận thời điểm mở bàn.<br>5. Hệ thống trả về thông tin phiên (giỏ hàng chung hiện tại nếu có) và mở trang thực đơn (chuyển UC02). |
-| Alternative Flow | 4a. Nếu bàn đã ở trạng thái "Đang có khách" (một người trong nhóm đã mở trước), hệ thống bỏ qua bước chuyển trạng thái và cho khách tham gia thẳng vào phiên hiện có, đồng bộ giỏ hàng chung đang có. |
-| Exception Flow | 3a. Token không khớp hoặc đã bị thu hồi (do Quản lý cấp lại QR hoặc bàn đã đóng trước đó).<br>- 3a1. Hệ thống hiển thị thông báo "Mã QR không còn hiệu lực, vui lòng liên hệ nhân viên".<br>- Use Case dừng lại. |
-| Business Rules | - BR01.1: Vòng đời mã QR và session token tuân theo QĐ2.<br>- BR01.2: Trạng thái bàn tuân theo QĐ7 (Available/Occupied/Cleaning). |
-| Non-Functional Requirement | - NFR01.1: Thời gian xác thực và tải trang order dưới 2 giây. |
+| Pre-Condition(s) | Mã QR của bàn còn hiệu lực (chưa bị thu hồi). Bàn đang mở phiên phục vụ. |
+| Post-Condition(s) | Trình duyệt được xác thực đúng bàn qua session_token; điều hướng tới trang nhập mã PIN (UC33) trước khi mở thực đơn (UC02). |
+| Basic Flow | 1. Khách hàng quét mã QR, mã chứa URL dạng `https://domain.com/table/{id}`.<br>2. Trình duyệt mở trang chào mừng của bàn, gửi yêu cầu xác thực phiên bàn với server.<br>3. Server đối chiếu và kiểm tra trạng thái bàn.<br>4. Nếu bàn ở trạng thái "Bàn trống" (AVAILABLE), hệ thống chuyển sang "Đang ăn" (OCCUPIED).<br>5. Hệ thống yêu cầu khách hàng nhập mã PIN 4 số của bàn để xác thực thiết bị (chuyển tiếp sang UC33). |
+| Alternative Flow | 4a. Nếu bàn đã ở trạng thái "Đang ăn" (OCCUPIED), hệ thống cho phép thiết bị mới tham gia vào phiên bàn sau khi nhập đúng mã PIN 4 số. |
+| Exception Flow | 3a. Mã QR không hợp lệ hoặc đã bị thu hồi.<br>- 3a1. Hệ thống báo lỗi "Mã QR bàn không còn hiệu lực. Vui lòng liên hệ nhân viên!".<br>- Use Case dừng lại. |
+| Business Rules | - BR01.1: Mã QR gắn liền với bàn vật lý và phiên phục vụ duy nhất. |
+| Non-Functional Requirement | - NFR01.1: Thời gian phản hồi điều hướng sau khi quét QR dưới 1.5 giây. |
+
+---
 
 ### 3.2.2 UC02: Xem thực đơn
 
@@ -399,17 +474,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC02 |
 | Use Case Name | Xem thực đơn |
-| Description | Là khách hàng, tôi muốn duyệt thực đơn theo danh mục để chọn món phù hợp. |
+| Description | Khách hàng duyệt thực đơn theo các thẻ danh mục, tìm kiếm món ăn, lọc theo tag (bán chạy, cay, chay...), hiển thị hình ảnh và đơn giá. |
 | Actor(s) | Khách hàng |
 | Priority | Must have |
-| Trigger | Khách hàng vào tab "Thực đơn" sau khi vào phiên order (UC01). |
-| Pre-Condition(s) | Phiên bàn hợp lệ (đã qua UC01). |
-| Post-Condition(s) | Danh sách món ăn theo danh mục được hiển thị; món hết hàng hiển thị mờ và không thể thêm. |
-| Basic Flow | 1. Khách hàng vào tab "Thực đơn".<br>2. Hệ thống lấy danh sách danh mục và món ăn kèm ảnh, giá, trạng thái còn/hết.<br>3. Giao diện hiển thị món theo từng danh mục dạng tab cuộn (Nước lẩu, Thịt bò, Hải sản, Rau nấm, Thức uống, Bán chạy...).<br>4. Khách hàng chuyển tab danh mục để xem các nhóm món khác nhau. |
-| Alternative Flow | 3a. Khách hàng chọn danh mục "Bán chạy" (Best Seller) → hệ thống hiển thị Top món có lượt gọi cao nhất trong 7 ngày gần nhất. |
-| Exception Flow | 2a. Lỗi kết nối tới server.<br>- 2a1. Hệ thống hiển thị "Không tải được thực đơn, vui lòng thử lại".<br>- Use Case dừng lại. |
-| Business Rules | - BR02.1: Danh mục "Bán chạy" là danh mục hệ thống tự tổng hợp theo QĐ5, không do Quản lý gán thủ công. |
-| Non-Functional Requirement | - NFR02.1: Giao diện mobile-first, tối ưu cuộn theo tab danh mục. |
+| Trigger | Khách hàng vào trang thực đơn sau khi xác thực mã PIN thành công. |
+| Pre-Condition(s) | Thiết bị đã xác thực phiên bàn hợp lệ (qua UC01 và UC33). |
+| Post-Condition(s) | Danh sách món ăn hiển thị đầy đủ kèm hình ảnh, tên, đơn giá VNĐ, mô tả và trạng thái Còn hàng / Hết hàng. |
+| Basic Flow | 1. Khách hàng truy cập trang thực đơn `/table/:tableId/menu`.<br>2. Hệ thống tải danh mục và danh sách món ăn từ Database.<br>3. Khách hàng cuộn danh sách (ScrollSpy 2 chiều) hoặc bấm vào các thẻ danh mục (Bán chạy, Lẩu, Bò & Thịt, Hải sản, Đồ uống...).<br>4. Khách hàng có thể nhập từ khóa vào thanh tìm kiếm hoặc lọc theo tag. |
+| Alternative Flow | 3a. Khách hàng bấm chọn tag "Bán Chạy" / "Đặc sắc", hệ thống hiển thị danh sách các món nổi bật được gắn cờ. |
+| Exception Flow | 2a. Mất kết nối server: Hệ thống hiển thị thông báo lỗi mạng và nút "Thử lại". |
+| Business Rules | - BR02.1: Món ăn ở trạng thái Tạm khóa (Hết hàng) phải hiển thị nhãn SOLD OUT và khóa nút thêm món. |
+| Non-Functional Requirement | - NFR02.1: Giao diện tối ưu cuộn mượt mà trên thiết bị di động (Mobile Responsive). |
+
+---
 
 ### 3.2.3 UC03: Xem chi tiết món ăn
 
@@ -417,17 +494,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC03 |
 | Use Case Name | Xem chi tiết món ăn |
-| Description | Là khách hàng, tôi muốn xem chi tiết một món ăn trước khi quyết định gọi món. |
+| Description | Xem chi tiết từng món ăn gồm ảnh sắc nét, mô tả nguyên liệu, độ cay, giá tiền và trạng thái còn món hay tạm hết. |
 | Actor(s) | Khách hàng |
 | Priority | Should have |
-| Trigger | Khách hàng chạm vào một món trong danh sách thực đơn (UC02). |
-| Pre-Condition(s) | Đã ở màn hình thực đơn. |
-| Post-Condition(s) | Modal/trang chi tiết hiển thị ảnh phóng to, mô tả nguyên liệu/hương vị, giá và trạng thái còn/hết hàng. |
-| Basic Flow | 1. Khách hàng chạm vào món ăn muốn xem.<br>2. Hệ thống lấy dữ liệu chi tiết của món.<br>3. Hiển thị chi tiết (ảnh lớn, mô tả, giá, nhãn Best Seller nếu có).<br>4. Khách hàng có thể thêm món vào giỏ ngay từ đây nếu món còn hàng (chuyển UC21). |
+| Trigger | Khách hàng nhấn vào thẻ món ăn trên danh sách thực đơn. |
+| Pre-Condition(s) | Đang ở giao diện thực đơn (UC02). |
+| Post-Condition(s) | Modal chi tiết món ăn mở ra, hiển thị đầy đủ thông tin chuyên sâu. |
+| Basic Flow | 1. Khách hàng chạm vào món ăn cần xem.<br>2. Modal hiển thị ảnh chất lượng cao, mô tả nguyên liệu chi tiết, độ cay, mức giá và trạng thái phục vụ.<br>3. Khách hàng có thể tùy chỉnh số lượng và bấm "Thêm vào giỏ hàng" trực tiếp từ modal (UC21). |
 | Alternative Flow | Không có |
-| Exception Flow | 4a. Món vừa chuyển sang hết hàng trong lúc xem chi tiết (do bếp/Quản lý cập nhật realtime).<br>- 4a1. Nút "Thêm" tự động bị vô hiệu hóa, hiển thị "Món vừa hết hàng".<br>- Use Case dừng lại. |
-| Business Rules | - BR03.1: Tuân theo QĐ4 (quy định Còn hàng/Hết hàng). |
-| Non-Functional Requirement | - NFR03.1: Ảnh tải theo cơ chế lazy-load để không làm chậm trang khi nhiều ảnh chất lượng cao. |
+| Exception Flow | 2a. Món ăn vừa chuyển sang hết hàng trong lúc mở modal: Hệ thống tự động vô hiệu hóa nút thêm món. |
+| Business Rules | - BR03.1: Ảnh món tải từ link Cloudinary CDN tối ưu hóa độ phân giải. |
+| Non-Functional Requirement | - NFR03.1: Thời gian mở modal chi tiết dưới 200ms. |
+
+---
 
 ### 3.2.4 UC04: Quản lý giỏ hàng chung (Realtime Cart)
 
@@ -435,17 +514,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC04 |
 | Use Case Name | Quản lý giỏ hàng chung (Realtime Cart) |
-| Description | Là khách hàng, tôi muốn cả bàn cùng thao tác trên một giỏ hàng chung, đồng bộ tức thì trên mọi thiết bị; gồm thêm món (UC21), điều chỉnh số lượng (UC22), xem giỏ hàng & tổng tiền (UC23). |
+| Description | Giỏ hàng chung đồng bộ thời gian thực giữa mọi thiết bị đang cùng ngồi tại bàn (thêm món, chỉnh số lượng, ghi chú, tính tổng tiền tạm tính). |
 | Actor(s) | Khách hàng |
 | Priority | Must have |
-| Trigger | Khách hàng chọn biểu tượng giỏ hàng hoặc thêm món từ thực đơn. |
-| Pre-Condition(s) | Phiên bàn hợp lệ. |
-| Post-Condition(s) | Giỏ hàng được đồng bộ tức thì trên mọi thiết bị đang mở cùng phiên bàn. |
-| Basic Flow | 1. Khách hàng thao tác trên giỏ hàng (thêm/sửa số lượng/xem).<br>2. Hệ thống phát sự kiện WebSocket cập nhật giỏ hàng tới toàn bộ thiết bị đang kết nối phiên bàn.<br>3. Mọi thiết bị nhận cập nhật realtime, hiển thị đồng nhất. |
+| Trigger | Khách hàng thực hiện bất kỳ thao tác nào lên giỏ hàng (thêm, sửa, xóa, ghi chú). |
+| Pre-Condition(s) | Thiết bị đang trong phiên bàn hợp lệ. |
+| Post-Condition(s) | Giỏ hàng chung của cả bàn được cập nhật và đồng bộ tức thời 0ms tới tất cả các thiết bị đang kết nối. |
+| Basic Flow | 1. Khách hàng thao tác trên giỏ hàng tại thiết bị cá nhân.<br>2. Hệ thống lưu thay đổi và phát thông điệp đồng bộ qua kênh WebSocket `/topic/table/{tableNumber}/cart` hoặc BroadcastChannel.<br>3. Mọi thiết bị khác trong bàn tự động cập nhật giỏ hàng tương ứng mà không cần tải lại trang. |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Mất kết nối realtime tạm thời.<br>- 2a1. Thiết bị tự động kết nối lại và đồng bộ lại giỏ hàng khi có mạng trở lại. |
-| Business Rules | - BR04.1: Giỏ hàng chỉ tồn tại tạm thời (các món chưa gửi bếp) và bị xóa khi phiên bàn đóng (UC32). |
-| Non-Functional Requirement | - NFR04.1: Độ trễ đồng bộ giữa các thiết bị trong cùng bàn dưới 1 giây. |
+| Exception Flow | 2a. Mất kết nối mạng: Hệ thống hiển thị cảnh báo offline và tự động tái kết nối khi mạng phục hồi. |
+| Business Rules | - BR04.1: Giỏ hàng chung chỉ chứa các món đang chờ gửi bếp (đơn nháp). |
+| Non-Functional Requirement | - NFR04.1: Độ trễ đồng bộ giỏ hàng giữa các thiết bị dưới 500ms. |
+
+---
 
 ### 3.2.5 UC05: Gửi đơn gọi món
 
@@ -453,17 +534,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC05 |
 | Use Case Name | Gửi đơn gọi món |
-| Description | Là khách hàng, tôi muốn gửi các món đã chọn trong giỏ hàng vào bếp thành một đợt order. |
+| Description | Khách chốt các món trong giỏ hàng, gửi một đợt gọi món mới (Order Round) vào màn hình POS Bếp, tự động làm rỗng giỏ hàng và phát WebSocket. |
 | Actor(s) | Khách hàng |
 | Priority | Must have |
-| Trigger | Khách hàng nhấn "Gửi đơn vào bếp" sau khi đã chọn món trong giỏ hàng (UC04). |
-| Pre-Condition(s) | Giỏ hàng có ít nhất một món; bàn không bị khóa order (is_order_locked = false). |
-| Post-Condition(s) | Một Order Round mới được tạo với từng món ở trạng thái "Đang chuẩn bị"; bếp nhận được đơn theo thời gian thực. |
-| Basic Flow | 1. Khách hàng xem lại giỏ hàng, nhấn "Gửi đơn vào bếp".<br>2. Hệ thống kiểm tra cờ is_order_locked của bàn.<br>3. Hệ thống tạo Order Round mới (số thứ tự đợt tăng dần), gán từng món trạng thái "Đang chuẩn bị", ghi nhận đơn giá tại thời điểm gọi.<br>4. Hệ thống trừ tồn kho tức thời tương ứng.<br>5. Hệ thống phát sự kiện realtime kèm âm thanh "Ting ting" tới màn hình Bếp và Quản lý.<br>6. Giỏ hàng tạm được làm trống, khách chuyển sang theo dõi trạng thái (UC06). |
+| Trigger | Khách hàng (Chủ Bàn hoặc thành viên có quyền) nhấn nút "Gửi đơn vào bếp". |
+| Pre-Condition(s) | Giỏ hàng có ít nhất 1 món ăn; quyền gọi món của bàn không bị khóa (`is_order_locked = false`). |
+| Post-Condition(s) | Một Order Round mới được tạo, chuyển vào màn hình Bếp KDS; giỏ hàng chung của bàn được làm rỗng. |
+| Basic Flow | 1. Khách hàng kiểm tra giỏ hàng và nhấn nút "Gửi đơn vào bếp".<br>2. Hệ thống kiểm tra hợp lệ: món còn hàng và bàn không bị khóa order.<br>3. Hệ thống tạo Order Round mới với mã đợt gọi và danh sách món ăn, gán trạng thái ban đầu là Đang nấu (`COOKING`).<br>4. Hệ thống phát WebSocket tới kênh `/topic/kitchen/orders` kèm âm thanh chuông báo.<br>5. Giỏ hàng chung được xóa rỗng và giao diện khách chuyển sang theo dõi tiến độ món (UC06). |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Bàn đang bị khóa order (is_order_locked = true).<br>- 2a1. Hệ thống từ chối với lỗi "Bàn hiện không thể gọi thêm món" (HTTP 403).<br>- Use Case dừng lại.<br>4a. Một món trong giỏ vừa chuyển hết hàng trước khi gửi.<br>- 4a1. Hệ thống loại món đó khỏi đơn và yêu cầu khách xác nhận lại trước khi gửi. |
-| Business Rules | - BR05.1: Tuân theo QĐ3 (khóa order), QĐ4 (hết hàng) và QĐ9 (giới hạn số lượng 1–99 mỗi món). |
-| Non-Functional Requirement | - NFR05.1: Thời gian xử lý gửi đơn và phát tín hiệu tới bếp dưới 1 giây. |
+| Exception Flow | 2a. Bàn đang bị khóa order (`is_order_locked = true`): Hệ thống từ chối và báo lỗi: *"Bàn ăn hiện đang tạm khóa order. Vui lòng liên hệ nhân viên!"*.<br>2b. Một món trong giỏ vừa hết hàng: Hệ thống thông báo món hết hàng và yêu cầu xác nhận gỡ bỏ món trước khi gửi tiếp. |
+| Business Rules | - BR05.1: Đơn gọi món một khi đã gửi bếp sẽ không thể tự ý hủy từ phía khách hàng (phải qua nhân viên can thiệp). |
+| Non-Functional Requirement | - NFR05.1: Màn hình Bếp KDS nhận được đơn mới trong vòng dưới 1 giây. |
+
+---
 
 ### 3.2.6 UC06: Theo dõi trạng thái món ăn
 
@@ -471,17 +554,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC06 |
 | Use Case Name | Theo dõi trạng thái món ăn |
-| Description | Là khách hàng, tôi muốn theo dõi realtime món nào đang được nấu và món nào đã mang ra bàn. |
+| Description | Khách theo dõi danh sách tất cả các đợt gọi món của bàn và tiến độ từng món (Đang chế biến -> Đã phục vụ -> Đã bưng ra bàn / Hết món) cập nhật theo thời gian thực. |
 | Actor(s) | Khách hàng |
-| Priority | Should have |
-| Trigger | Khách hàng mở tab "Đơn của tôi" sau khi đã gửi ít nhất một đơn (UC05). |
-| Pre-Condition(s) | Đã có ít nhất một Order Round trong phiên bàn. |
-| Post-Condition(s) | Trạng thái realtime từng món (Đang chuẩn bị/Đã phục vụ/Đã hủy) được hiển thị. |
-| Basic Flow | 1. Khách hàng mở tab theo dõi đơn.<br>2. Hệ thống lấy toàn bộ Order Round của phiên bàn hiện tại, nhóm theo đợt gọi.<br>3. Khi bếp cập nhật trạng thái món (UC18) hoặc Quản lý hủy món (UC13), hệ thống đẩy realtime cập nhật giao diện khách ngay lập tức. |
+| Priority | High |
+| Trigger | Khách hàng mở tab "Đơn đã gọi" trên thanh giỏ hàng hoặc điều hướng. |
+| Pre-Condition(s) | Bàn đã gửi ít nhất một đợt gọi món (UC05). |
+| Post-Condition(s) | Màn hình hiển thị chi tiết từng đợt order kèm trạng thái thời gian thực của từng món ăn. |
+| Basic Flow | 1. Khách hàng mở tab "Đơn đã gọi".<br>2. Hệ thống hiển thị danh sách các đợt gọi món (Đợt 1, Đợt 2...).<br>3. Khi Bếp hoặc Phục vụ cập nhật tiến độ (COOKING -> SERVED -> DELIVERED), giao diện khách hàng tự động cập nhật thanh tiến độ và màu sắc tương ứng theo thời gian thực. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR06.1: Tuân theo QĐ8 (trạng thái món: Đang chuẩn bị/Đã phục vụ/Đã hủy). |
-| Non-Functional Requirement | - NFR06.1: Cập nhật trạng thái hiển thị tức thời (dưới 1 giây), không cần tải lại trang. |
+| Business Rules | - BR06.1: Trạng thái món cập nhật qua WebSocket STOMP bảo đảm tính tức thời. |
+| Non-Functional Requirement | - NFR06.1: Không yêu cầu người dùng phải bấm F5 để xem tiến độ mới. |
+
+---
 
 ### 3.2.7 UC07: Gọi nhân viên phục vụ
 
@@ -489,17 +574,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC07 |
 | Use Case Name | Gọi nhân viên phục vụ |
-| Description | Là khách hàng, tôi muốn bấm chuông gọi nhân viên khi cần hỗ trợ (xin nước đá, chén đũa...). |
+| Description | Khách bấm chuông gọi nhân viên chọn lý do cụ thể (Xin nước đá, Thêm nước lẩu, Lấy chén đũa, Hỗ trợ khác), gửi thông báo tới Waiter và Manager. |
 | Actor(s) | Khách hàng |
-| Priority | Should have |
-| Trigger | Khách hàng nhấn nút chuông "Gọi nhân viên". |
-| Pre-Condition(s) | Phiên bàn hợp lệ. |
-| Post-Condition(s) | Thông báo kèm âm thanh được gửi tới màn hình Quản lý (UC14). |
-| Basic Flow | 1. Khách hàng nhấn nút gọi nhân viên (có thể chọn lý do nhanh: xin nước đá/chén đũa/khác).<br>2. Hệ thống kiểm tra thời gian lần gọi gần nhất của bàn.<br>3. Hệ thống ghi log yêu cầu và phát sự kiện realtime kèm âm thanh "Ting ting" tới màn hình Quản lý.<br>4. Giao diện khách hiển thị "Đã gửi yêu cầu, nhân viên đang đến!". |
+| Priority | High |
+| Trigger | Khách hàng nhấn nút chuông "Gọi nhân viên" trên giao diện. |
+| Pre-Condition(s) | Thiết bị đang trong phiên bàn hợp lệ. |
+| Post-Condition(s) | Thông báo chuông kèm số bàn và lý do được phát tới màn hình Waiter và Admin. |
+| Basic Flow | 1. Khách hàng nhấn biểu tượng chuông gọi nhân viên.<br>2. Chọn lý do cần hỗ trợ: "Xin nước đá", "Thêm nước lẩu", "Lấy thêm chén dĩa", hoặc "Hỗ trợ khác".<br>3. Nhấn "Xác nhận gửi gọi".<br>4. Hệ thống ghi nhận yêu cầu và bắn WebSocket tới màn hình nhân viên phục vụ (`/topic/waiter/alerts`) kèm âm thanh cảnh báo.<br>5. Màn hình khách hàng hiển thị thông báo: *"Đã gọi nhân viên thành công. Nhân viên sẽ tới ngay!"*. |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Khách bấm liên tục trong vòng 30 giây kể từ lần gọi trước.<br>- 2a1. Hệ thống không tạo yêu cầu mới, chỉ hiển thị lại thông báo "Yêu cầu của bạn đã được gửi, nhân viên đang đến!".<br>- Use Case dừng lại. |
-| Business Rules | - BR07.1: Tuân theo QĐ10 (Rate Limiting 30 giây/lần gọi). |
-| Non-Functional Requirement | - NFR07.1: Âm thanh và hiệu ứng cảnh báo phải đủ nổi bật để nhân viên không bỏ sót giữa ca đông khách. |
+| Exception Flow | 4a. Khách bấm liên tục: Hệ thống kích hoạt cơ chế giới hạn tần suất (Rate Limiting) chặn bấm lặp lại trong vòng 30 giây. |
+| Business Rules | - BR07.1: Chỉ cho phép gửi lại yêu cầu mới sau khoảng thời gian đệm an toàn. |
+| Non-Functional Requirement | - NFR07.1: Âm thanh thông báo bên phía nhân viên phải rõ ràng, thu hút sự chú ý. |
+
+---
 
 ### 3.2.8 UC08: Yêu cầu thanh toán
 
@@ -507,17 +594,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC08 |
 | Use Case Name | Yêu cầu thanh toán |
-| Description | Là khách hàng, tôi muốn báo cho Quản lý biết bàn tôi đã sẵn sàng thanh toán. |
+| Description | Khách xem hóa đơn tạm tính và gửi tín hiệu yêu cầu thanh toán về quầy thu ngân / POS quản lý, bàn chuyển sang trạng thái chờ bill (BILL_REQUESTED). |
 | Actor(s) | Khách hàng |
 | Priority | Must have |
-| Trigger | Khách hàng nhấn nút "Yêu cầu thanh toán". |
-| Pre-Condition(s) | Bàn đang có ít nhất một Order Round đã gửi bếp. |
-| Post-Condition(s) | Yêu cầu thanh toán được gửi tới Quản lý kèm tổng tiền tạm tính (UC14). |
-| Basic Flow | 1. Khách hàng xem tổng hóa đơn tạm tính (UC23) và chọn phương thức mong muốn (chỉ là nguyện vọng tham khảo, việc xác nhận cuối do Quản lý thực hiện ở UC15).<br>2. Khách hàng nhấn "Yêu cầu thanh toán".<br>3. Hệ thống ghi log yêu cầu, phát sự kiện realtime kèm âm thanh tới màn hình Quản lý.<br>4. Giao diện khách hiển thị "Yêu cầu thanh toán đã được gửi, vui lòng chờ nhân viên". |
+| Trigger | Khách hàng nhấn nút "Yêu cầu thanh toán" sau khi dùng bữa xong. |
+| Pre-Condition(s) | Bàn đã có ít nhất một đợt gọi món hoàn tất. |
+| Post-Condition(s) | Bàn chuyển trạng thái sang Chờ thanh toán (`BILL_REQUESTED`); thu ngân nhận cảnh báo chốt bill. |
+| Basic Flow | 1. Khách hàng mở bảng tổng kết hóa đơn tạm tính.<br>2. Nhấn nút "Yêu cầu thanh toán" và chọn phương thức mong muốn (Tiền mặt hoặc Chuyển khoản).<br>3. Hệ thống cập nhật trạng thái bàn sang `BILL_REQUESTED` và khóa cờ order bàn.<br>4. Server phát thông điệp cảnh báo tới quầy thu ngân và nhân viên phục vụ.<br>5. Màn hình khách hàng chuyển sang chế độ chờ đối soát và hiển thị thông điệp chờ nhân viên tới hỗ trợ. |
 | Alternative Flow | Không có |
-| Exception Flow | 3a. Bàn chưa có món nào được gửi bếp (chỉ có giỏ hàng tạm chưa order).<br>- 3a1. Hệ thống từ chối, báo "Bàn chưa có đơn gọi món nào để thanh toán".<br>- Use Case dừng lại. |
-| Business Rules | - BR08.1: Tổng tiền tạm tính tuân theo công thức QĐ1. |
-| Non-Functional Requirement | - NFR08.1: Tổng tiền tạm tính hiển thị phải khớp chính xác với công thức tính hóa đơn cuối cùng (không sai lệch làm tròn). |
+| Exception Flow | 1a. Bàn chưa gọi món nào: Nút yêu cầu thanh toán bị vô hiệu hóa. |
+| Business Rules | - BR08.1: Khi bàn chuyển sang `BILL_REQUESTED`, khách hàng không thể tự ý gọi thêm món nếu chưa được mở khóa. |
+| Non-Functional Requirement | - NFR08.1: Tổng tiền hiển thị trên màn hình khách phải khớp 100% với số liệu tại quầy POS. |
+
+---
 
 ### 3.2.9 UC09: Đăng nhập hệ thống quản trị
 
@@ -525,17 +614,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC09 |
 | Use Case Name | Đăng nhập hệ thống quản trị |
-| Description | Là Quản lý/Nhân viên Bếp, tôi muốn đăng nhập để được cấp quyền truy cập đúng phân hệ của mình (Dashboard quản trị hoặc màn hình điều phối bếp KDS). |
-| Actor(s) | Quản lý, Nhân viên Bếp |
+| Description | Đăng nhập tài khoản nội bộ (Admin, Manager, Kitchen, Waiter) bằng Email và Mật khẩu, cấp JWT token và điều hướng về phân hệ được phân quyền. |
+| Actor(s) | Admin, Manager, Kitchen, Waiter |
 | Priority | Must have |
-| Trigger | Người dùng mở trang đăng nhập, nhập tài khoản. |
-| Pre-Condition(s) | Tài khoản đã tồn tại trong hệ thống. |
-| Post-Condition(s) | Người dùng được cấp JWT Token kèm vai trò và truy cập đúng phân hệ tương ứng. |
-| Basic Flow | 1. Người dùng nhập username/email và mật khẩu, nhấn "Đăng nhập".<br>2. Hệ thống kiểm tra thông tin, đối chiếu với mật khẩu đã băm trong Database.<br>3. Hệ thống cấp JWT Token kèm vai trò (Manager/Kitchen).<br>4. Hệ thống chuyển hướng vào Dashboard quản trị (Quản lý) hoặc màn hình KDS (Nhân viên Bếp) tương ứng. |
+| Trigger | Nhân sự truy cập trang đăng nhập nội bộ `/login`. |
+| Pre-Condition(s) | Tài khoản nhân sự đã được tạo trong cơ sở dữ liệu và đang ở trạng thái kích hoạt (`ACTIVE`). |
+| Post-Condition(s) | Cấp cặp JWT Token (Access Token & Refresh Token), lưu vào cookie/storage và điều hướng về đúng trang chức năng tương ứng. |
+| Basic Flow | 1. Người dùng nhập Email và Mật khẩu vào form đăng nhập.<br>2. Nhấn nút "Đăng nhập".<br>3. Hệ thống xác thực mật khẩu qua mã băm BCrypt và kiểm tra trạng thái tài khoản.<br>4. Tạo chuỗi JWT Token chứa thông tin định danh và danh sách quyền hạn (Roles/Authorities).<br>5. Hệ thống điều hướng: Admin/Manager vào `/admin`, Bếp vào `/kitchen`, Phục vụ vào `/waiter`. |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Sai tài khoản hoặc mật khẩu.<br>- 2a1. Hệ thống báo lỗi "Thông tin đăng nhập không chính xác".<br>- Use Case dừng lại. |
-| Business Rules | - BR09.1: Phân quyền RBAC (Manager/Kitchen) được áp dụng nghiêm ngặt tại tầng API. |
-| Non-Functional Requirement | - NFR09.1: Thời gian xác thực không quá 2 giây. |
+| Exception Flow | 3a. Nhập sai email hoặc mật khẩu: Báo lỗi *"Tài khoản hoặc mật khẩu không chính xác!"*.<br>3b. Tài khoản bị tạm khóa (`INACTIVE`): Báo lỗi *"Tài khoản đã bị tạm khóa. Vui lòng liên hệ Quản trị viên!"*. |
+| Business Rules | - BR09.1: Áp dụng cơ chế phân quyền RBAC nghiêm ngặt tại tầng Spring Security và React Route Guards. |
+| Non-Functional Requirement | - NFR09.1: Thời gian xử lý đăng nhập dưới 1 giây. Mật khẩu không bao giờ lưu dưới dạng văn bản thô. |
+
+---
 
 ### 3.2.10 UC10: Quản lý thực đơn
 
@@ -543,17 +634,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC10 |
 | Use Case Name | Quản lý thực đơn |
-| Description | Là quản lý, tôi muốn truy cập phân hệ quản lý thực đơn. Phân hệ gồm: quản lý danh sách món ăn (UC24), quản lý danh mục (UC25) và cập nhật trạng thái còn/hết hàng (UC26). |
-| Actor(s) | Quản lý |
+| Description | Phân hệ toàn diện quản lý món ăn, phân nhóm danh mục và công tắc bật/tắt trạng thái phục vụ còn/hết món. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Quản lý chọn mục "Quản lý thực đơn" trên Dashboard. |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Giao diện tổng hợp thực đơn (món ăn + danh mục) được hiển thị. |
-| Basic Flow | 1. Quản lý chọn "Quản lý thực đơn".<br>2. Hệ thống tải danh sách món ăn và danh mục hiện có.<br>3. Quản lý chọn tiếp thao tác con: UC24, UC25 hoặc UC26. |
+| Trigger | Quản lý chọn mục "Thực đơn" trên menu điều hướng quản trị. |
+| Pre-Condition(s) | Đã đăng nhập tài khoản có quyền Quản lý thực đơn (`MENU_MANAGE`). |
+| Post-Condition(s) | Giao diện quản lý thực đơn hiển thị danh sách món, danh mục, thanh thống kê và các bộ lọc nghiệp vụ. |
+| Basic Flow | 1. Quản lý truy cập trang `/admin/menu`.<br>2. Hệ thống tải toàn bộ danh sách món ăn và danh mục từ Database.<br>3. Hiển thị thanh tóm tắt số lượng món (Tổng số, Đang bán, Tạm khóa).<br>4. Quản lý thực hiện các chức năng con: UC24 (Quản lý món), UC25 (Quản lý danh mục), UC26 (Cập nhật trạng thái) và UC41 (Tải ảnh CDN). |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Tài khoản không có role Manager.<br>- 2a1. Hệ thống báo lỗi "Bạn không có quyền truy cập".<br>- Use Case dừng lại. |
-| Business Rules | Không có (xem quy định riêng của từng UC con). |
-| Non-Functional Requirement | - NFR10.1: Danh sách hỗ trợ tìm kiếm/lọc theo tên món hoặc danh mục. |
+| Exception Flow | 2a. Lỗi tải dữ liệu: Hiển thị thông báo cảnh báo và cho phép bấm "Tải lại dữ liệu". |
+| Business Rules | - BR10.1: Mọi thay đổi về món ăn và trạng thái được đồng bộ thời gian thực sang phía khách hàng. |
+| Non-Functional Requirement | - NFR10.1: Hỗ trợ tìm kiếm nhanh, lọc theo danh mục và phân trang mượt mà. |
+
+---
 
 ### 3.2.11 UC11: Quản lý bàn ăn
 
@@ -561,17 +654,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC11 |
 | Use Case Name | Quản lý bàn ăn |
-| Description | Là quản lý, tôi muốn truy cập phân hệ quản lý bàn ăn. Phân hệ gồm: quản lý danh sách bàn (UC27), cấp lại mã QR (UC28) và bật/tắt quyền order (UC29). |
-| Actor(s) | Quản lý |
+| Description | Quản lý thông tin bàn, thiết lập khu vực, tạo mã QR, cấp lại PIN xoay vòng và khóa/mở quyền gọi món khẩn cấp. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Quản lý chọn mục "Quản lý bàn ăn" trên Dashboard. |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Danh sách bàn kèm trạng thái, mã QR, cờ khóa order được hiển thị. |
-| Basic Flow | 1. Quản lý chọn "Quản lý bàn ăn".<br>2. Hệ thống tải danh sách bàn hiện có kèm trạng thái vận hành.<br>3. Quản lý chọn tiếp thao tác con: UC27, UC28 hoặc UC29. |
+| Trigger | Quản lý chọn mục "Quản lý bàn" trên thanh điều hướng. |
+| Pre-Condition(s) | Đã đăng nhập tài khoản có quyền Quản lý bàn (`TABLE_MANAGE`). |
+| Post-Condition(s) | Bảng danh sách bàn hiển thị đầy đủ trạng thái, khu vực, mã PIN, mã QR và cờ khóa order. |
+| Basic Flow | 1. Quản lý mở trang `/admin/tables`.<br>2. Hệ thống hiển thị danh sách toàn bộ các bàn trong nhà hàng.<br>3. Quản lý thực hiện các chức năng con: UC27 (Thêm/sửa bàn), UC28 (Cấp lại QR/PIN), UC29 (Khóa/mở order) và UC42 (In hàng loạt tem mã QR). |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Tài khoản không có role Manager.<br>- 2a1. Hệ thống báo lỗi "Bạn không có quyền truy cập".<br>- Use Case dừng lại. |
-| Business Rules | Không có (xem quy định riêng của từng UC con). |
-| Non-Functional Requirement | - NFR11.1: Hiển thị trạng thái bàn realtime, đồng bộ với sơ đồ tổng quát (UC12). |
+| Exception Flow | Không có |
+| Business Rules | - BR11.1: Quản lý trạng thái bàn ăn theo 4 trạng thái chuẩn: Trống (`AVAILABLE`), Đang ăn (`OCCUPIED`), Chờ bill (`BILL_REQUESTED`), Đang dọn (`CLEANING`). |
+| Non-Functional Requirement | - NFR11.1: Trạng thái bàn ăn tự động cập nhật realtime khi khách vào bàn hoặc thanh toán. |
+
+---
 
 ### 3.2.12 UC12: Xem sơ đồ tổng quát bàn ăn
 
@@ -579,17 +674,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC12 |
 | Use Case Name | Xem sơ đồ tổng quát bàn ăn |
-| Description | Là quản lý, tôi muốn xem toàn cảnh mặt bằng các bàn ăn để nắm nhanh tình hình vận hành. |
-| Actor(s) | Quản lý |
+| Description | Bản đồ sơ đồ bàn ăn trực quan theo từng khu vực (Tầng trệt, Tầng 1, VIP...), mã màu theo trạng thái (Trống, Đang ăn, Chờ bill, Đang dọn), hiển thị thời lượng ngồi và tiền tạm tính. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Quản lý mở trang Dashboard chính/"Sơ đồ bàn ăn". |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Bản đồ trực quan toàn bộ bàn (màu sắc theo trạng thái, thời gian ngồi, tạm tính) được hiển thị. |
-| Basic Flow | 1. Quản lý mở trang sơ đồ bàn.<br>2. Hệ thống lấy trạng thái tất cả bàn (Trống/Đang có khách/Đang dọn dẹp), thời điểm mở bàn và tổng tạm tính hiện tại của từng bàn đang có khách.<br>3. Giao diện hiển thị mặt bằng bàn bằng màu sắc phân biệt theo trạng thái.<br>4. Quản lý bấm vào một bàn để xem chi tiết order (UC13) hoặc xác nhận thanh toán (UC15). |
+| Trigger | Quản lý mở Dashboard chính hoặc trang "Sơ đồ bàn". |
+| Pre-Condition(s) | Tài khoản có quyền Quản lý / Thu ngân. |
+| Post-Condition(s) | Bản đồ trực quan hiển thị vị trí các bàn với mã màu trạng thái trực quan, thời gian khách ngồi và số tiền tạm tính hiện hành. |
+| Basic Flow | 1. Quản lý truy cập trang Sơ đồ bàn `/admin/dashboard`.<br>2. Chọn khu vực xem (Tất cả, Tầng trệt, Tầng 1, Phòng VIP).<br>3. Xem trạng thái từng bàn qua mã màu trực quan: Xanh lá (Trống), Đỏ (Đang ăn), Vàng (Chờ tính tiền), Xám (Đang dọn dẹp).<br>4. Nhấp vào thẻ bàn bất kỳ để xem nhanh chi tiết order, hóa đơn tạm tính hoặc thực hiện thao tác nhanh. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR12.1: Tuân theo QĐ7 (3 trạng thái bàn cố định). |
-| Non-Functional Requirement | - NFR12.1: Sơ đồ tự động làm mới (realtime) mỗi khi trạng thái bàn thay đổi, không cần tải lại trang. |
+| Business Rules | - BR12.1: Bàn thuộc Cụm bàn liên kết (Master - Slave) phải hiển thị nhãn cụm rõ ràng. |
+| Non-Functional Requirement | - NFR12.1: Tự động cập nhật 0ms qua WebSocket khi có bàn mở hoặc chuyển trạng thái. |
+
+---
 
 ### 3.2.13 UC13: Can thiệp & điều chỉnh order khách hàng
 
@@ -597,17 +694,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC13 |
 | Use Case Name | Can thiệp & điều chỉnh order khách hàng |
-| Description | Là quản lý, tôi muốn sửa số lượng, đổi món hoặc hủy món trong order của khách khi xảy ra sự cố (hết nguyên liệu đột xuất, khách đổi ý). |
-| Actor(s) | Quản lý |
-| Priority | Should have |
-| Trigger | Từ sơ đồ bàn (UC12) hoặc danh sách bếp (UC17), Quản lý chọn một bàn/đơn để chỉnh sửa. |
-| Pre-Condition(s) | Tài khoản có role Manager; order đang tồn tại và chưa thanh toán xong. |
-| Post-Condition(s) | Order được điều chỉnh (sửa số lượng, đổi món, hủy món kèm lý do), có ghi log can thiệp. |
-| Basic Flow | 1. Quản lý mở chi tiết order của bàn.<br>2. Quản lý chọn món cần sửa/hủy, nhập lý do nếu hủy.<br>3. Hệ thống cập nhật Database, ghi log Audit (ai can thiệp, lúc nào, lý do).<br>4. Hệ thống phát realtime cập nhật cho khách hàng (UC06) và bếp (nếu món đang chờ nấu). |
-| Alternative Flow | Không có |
-| Exception Flow | 3a. Món đã ở trạng thái "Đã phục vụ".<br>- 3a1. Hệ thống không cho phép hủy món, chỉ cho phép ghi chú điều chỉnh hóa đơn thủ công riêng.<br>- Use Case dừng lại. |
-| Business Rules | - BR13.1: Mọi can thiệp phải được ghi vào Nhật ký hỗ trợ & Can thiệp (Audit & Call Staff Logs). |
-| Non-Functional Requirement | - NFR13.1: Thao tác chỉnh sửa phải phản ánh ngay trên hóa đơn tạm tính của bàn. |
+| Description | Sửa số lượng, đổi món, hủy món trong order của khách khi có sự cố. (Hiện tại mã nguồn chưa triển khai tính năng Quản lý sửa đổi các đợt order đã chốt gửi bếp). |
+| Actor(s) | Admin, Manager |
+| Priority | Medium |
+| Trigger | Quản lý mở chi tiết đơn hàng của bàn cần can thiệp xử lý sự cố. |
+| Pre-Condition(s) | Bàn đang có đơn order chưa thanh toán. Tài khoản có quyền Quản lý can thiệp. |
+| Post-Condition(s) | Đơn order được ghi nhận điều chỉnh, cập nhật số lượng hoặc hủy món; ghi log nhật ký can thiệp. |
+| Basic Flow | 1. Quản lý mở modal chi tiết order của bàn.<br>2. Chọn món cần điều chỉnh hoặc hủy bỏ.<br>3. Nhập lý do can thiệp (VD: Khách báo hủy do chờ lâu, Bếp báo hết nguyên liệu).<br>4. Hệ thống cập nhật cơ sở dữ liệu, ghi log Audit Trail.<br>5. Bắn thông điệp đồng bộ cập nhật sang Bếp KDS và Khách hàng. |
+| Alternative Flow | *(Ghi chú đặc tả: Tính năng này đang được quy hoạch phát triển, hiện tại hệ thống ưu tiên tính năng báo hết món từ bếp UC19)*. |
+| Exception Flow | 2a. Món đã được phục vụ lên bàn (`DELIVERED`): Không cho phép hủy trực tiếp nếu không có xác nhận đặc biệt. |
+| Business Rules | - BR13.1: Mọi can thiệp hủy món phải được lưu vết người thực hiện và lý do hủy. |
+| Non-Functional Requirement | - NFR13.1: Dữ liệu hóa đơn tự động tính toán lại ngay sau khi hủy món. |
+
+---
 
 ### 3.2.14 UC14: Tiếp nhận yêu cầu gọi nhân viên/thanh toán
 
@@ -615,17 +714,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC14 |
 | Use Case Name | Tiếp nhận yêu cầu gọi nhân viên/thanh toán |
-| Description | Là quản lý, tôi muốn nhận và xử lý các cảnh báo chuông gọi phục vụ hoặc yêu cầu thanh toán từ khách hàng theo thời gian thực. |
-| Actor(s) | Quản lý |
-| Priority | Must have |
-| Trigger | Hệ thống nhận sự kiện realtime từ UC07 (Gọi nhân viên) hoặc UC08 (Yêu cầu thanh toán). |
-| Pre-Condition(s) | Tài khoản có role Manager đang mở Dashboard. |
-| Post-Condition(s) | Yêu cầu được đánh dấu đã tiếp nhận/xử lý. |
-| Basic Flow | 1. Hệ thống phát âm thanh và hiển thị thẻ cảnh báo (số bàn, loại yêu cầu) trên Dashboard.<br>2. Quản lý xác nhận đã tiếp nhận (bấm "Đã xử lý").<br>3. Hệ thống ẩn cảnh báo và ghi log thời gian phản hồi. |
+| Description | Tiếp nhận chuông báo và xử lý yêu cầu phục vụ / yêu cầu tính tiền từ khách hàng trên màn hình Waiter và sơ đồ bàn Manager/Admin, hỗ trợ đánh dấu đã xử lý xong. |
+| Actor(s) | Waiter, Manager, Admin |
+| Priority | High |
+| Trigger | Khách hàng thực hiện UC07 (Gọi nhân viên) hoặc UC08 (Yêu cầu thanh toán). |
+| Pre-Condition(s) | Nhân viên đang mở màn hình phục vụ (`/waiter`) hoặc màn hình sơ đồ bàn (`/admin`). |
+| Post-Condition(s) | Yêu cầu hiển thị nổi bật kèm âm thanh chuông; nhân viên nhấn xác nhận "Đã tiếp nhận/Đã phục vụ xong" để đóng chuông. |
+| Basic Flow | 1. Hệ thống nhận tin nhắn WebSocket chuông gọi từ khách.<br>2. Phát âm thanh "Ting ting" và hiện banner cảnh báo đỏ nhấp nháy trên giao diện phục vụ.<br>3. Nhân viên tiếp nhận thông tin bàn và nội dung yêu cầu.<br>4. Sau khi tới bàn hỗ trợ khách xong, nhân viên bấm nút "Đã xử lý xong".<br>5. Hệ thống đóng cảnh báo và đồng bộ trạng thái đã xử lý về server. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR14.1: Yêu cầu được lưu vào Nhật ký hỗ trợ & Can thiệp để thống kê thời gian phản hồi. |
-| Non-Functional Requirement | - NFR14.1: Âm thanh cảnh báo phải phát liên tục cho đến khi được xác nhận. |
+| Business Rules | - BR14.1: Cảnh báo chuông tồn tại cho đến khi có ít nhất một nhân sự bấm xác nhận đã xử lý. |
+| Non-Functional Requirement | - NFR14.1: Tốc độ nhận cảnh báo dưới 300ms kể từ lúc khách bấm chuông. |
+
+---
 
 ### 3.2.15 UC15: Xác nhận thanh toán & đóng bàn
 
@@ -633,17 +734,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC15 |
 | Use Case Name | Xác nhận thanh toán & đóng bàn |
-| Description | Là quản lý, tôi muốn truy cập phân hệ chốt hóa đơn cho một bàn. Phân hệ gồm: thanh toán tiền mặt (UC30), thanh toán VietQR (UC31) và in hóa đơn & đóng bàn (UC32). |
-| Actor(s) | Quản lý |
+| Description | Chốt hóa đơn thanh toán cho bàn bằng Tiền mặt hoặc VietQR, tự động đóng phiên bàn, sinh mã PIN mới và chuyển bàn sang trạng thái dọn dẹp. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Nhận yêu cầu thanh toán (UC14) hoặc Quản lý chủ động chọn từ sơ đồ bàn (UC12). |
-| Pre-Condition(s) | Tài khoản có role Manager; bàn đang "Đang có khách" và có ít nhất một Order Round. |
-| Post-Condition(s) | Hóa đơn được lập, bàn chuyển sang "Đang dọn dẹp", mã QR cũ bị thu hồi. |
-| Basic Flow | 1. Quản lý mở màn hình thanh toán của bàn, hệ thống tính tổng hóa đơn theo QĐ1.<br>2. Quản lý chọn phương thức (chuyển UC30 hoặc UC31).<br>3. Sau khi xác nhận đã thu tiền, hệ thống chuyển sang UC32 để in hóa đơn & đóng bàn. |
+| Trigger | Thu ngân/Quản lý mở modal thanh toán của bàn ăn. |
+| Pre-Condition(s) | Bàn đang ở trạng thái `OCCUPIED` hoặc `BILL_REQUESTED`. |
+| Post-Condition(s) | Tạo hóa đơn thanh toán thành công (`PAID`), đóng phiên bàn cũ, sinh mã PIN mới và chuyển trạng thái bàn sang `CLEANING`. |
+| Basic Flow | 1. Thu ngân mở màn hình thanh toán của bàn.<br>2. Hệ thống tổng hợp toàn bộ các đợt gọi món, tính tiền tạm tính, chiết khấu và thuế VAT.<br>3. Chọn hình thức thanh toán: UC30 (Tiền mặt) hoặc UC31 (VietQR).<br>4. Thu ngân bấm "Xác nhận thanh toán và In hóa đơn" (UC32).<br>5. Hệ thống lưu hóa đơn, kết thúc phiên bàn cũ, sinh mã PIN 4 số mới và chuyển trạng thái bàn sang `CLEANING`.<br>6. Phát thông điệp WebSocket kết thúc phiên bàn tới thiết bị của khách hàng. |
 | Alternative Flow | Không có |
-| Exception Flow | 1a. Có món đang ở trạng thái "Đang chuẩn bị" chưa phục vụ xong.<br>- 1a1. Hệ thống cảnh báo, yêu cầu Quản lý xác nhận trước khi cho phép thanh toán. |
-| Business Rules | Không có (xem quy định riêng của từng UC con). |
-| Non-Functional Requirement | - NFR15.1: Toàn bộ quy trình thanh toán – đóng bàn phải hoàn tất trong dưới 1 phút thao tác. |
+| Exception Flow | 2a. Có món chưa phục vụ xong: Hệ thống cảnh báo để thu ngân kiểm tra lại với bếp. |
+| Business Rules | - BR15.1: Bàn sau khi thanh toán phải chuyển ngay sang trạng thái dọn dẹp và thu hồi token phiên cũ. |
+| Non-Functional Requirement | - NFR15.1: Quy trình thanh toán hoàn tất trong vòng dưới 30 giây. |
+
+---
 
 ### 3.2.16 UC16: Xem thống kê doanh thu
 
@@ -651,17 +754,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC16 |
 | Use Case Name | Xem thống kê doanh thu |
-| Description | Là quản lý, tôi muốn xem báo cáo, biểu đồ doanh thu để đánh giá hiệu quả kinh doanh. |
-| Actor(s) | Quản lý |
-| Priority | Should have |
-| Trigger | Quản lý chọn mục "Dashboard doanh thu". |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Biểu đồ và bảng số liệu doanh thu (BM1) được hiển thị. |
-| Basic Flow | 1. Quản lý chọn kỳ thống kê (Hôm nay/Tuần này/Tháng).<br>2. Hệ thống tính tổng doanh thu, tổng lượt bàn, doanh thu trung bình/bàn (QĐ6) và Top món bán chạy.<br>3. Hệ thống hiển thị biểu đồ cột/đường/tròn tương ứng. |
+| Description | Báo cáo doanh thu, chỉ số KPI (doanh thu, số lượt khách, giá trị trung bình đơn), biểu đồ doanh thu theo Ngày/Tuần/Tháng/Năm/Tùy chọn và Top 5 món bán chạy nhất. |
+| Actor(s) | Admin, Manager |
+| Priority | High |
+| Trigger | Quản lý truy cập mục "Báo cáo doanh thu" trên thanh điều hướng. |
+| Pre-Condition(s) | Đã đăng nhập tài khoản Quản lý có quyền xem doanh thu (`REVENUE_VIEW`). |
+| Post-Condition(s) | Màn hình hiển thị đầy đủ các thẻ KPI, biểu đồ cột/đường trực quan và danh sách top món ăn bán chạy nhất. |
+| Basic Flow | 1. Quản lý mở trang Báo cáo doanh thu `/admin/invoices` hoặc dashboard phân tích.<br>2. Chọn bộ lọc thời gian: Hôm nay, Tuần này, Tháng này, Năm nay hoặc Tùy chọn khoảng ngày.<br>3. Hệ thống tổng hợp dữ liệu từ các hóa đơn đã thanh toán (`PAID`).<br>4. Hiển thị các chỉ số: Tổng doanh thu, Số lượt bàn phục vụ, Doanh thu trung bình/bàn, Biểu đồ biến thiên doanh thu và Top 5 món bán chạy nhất. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR16.1: Doanh thu trung bình tính theo công thức QĐ6. |
-| Non-Functional Requirement | - NFR16.1: Biểu đồ sử dụng thư viện trực quan (VD: Chart.js) tải qua CDN. |
+| Business Rules | - BR16.1: Chỉ tính doanh thu từ các hóa đơn có trạng thái thanh toán hợp lệ (`PAID`). |
+| Non-Functional Requirement | - NFR16.1: Biểu đồ vẽ trực quan, thời gian tính toán kết xuất báo cáo dưới 1 giây. |
+
+---
 
 ### 3.2.17 UC17: Xem danh sách món cần chế biến
 
@@ -669,17 +774,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC17 |
 | Use Case Name | Xem danh sách món cần chế biến |
-| Description | Là nhân viên bếp, tôi muốn xem danh sách món cần nấu theo đúng thứ tự thời gian gọi để không bỏ sót đơn. |
-| Actor(s) | Nhân viên Bếp |
+| Description | Màn hình POS Bếp (KDS) hiển thị danh sách các đợt gọi món sắp xếp theo chuẩn FIFO, hỗ trợ xem theo từng đợt order hoặc xem tổng hợp (Aggregated View). |
+| Actor(s) | Kitchen, Manager |
 | Priority | Must have |
-| Trigger | Nhân viên bếp mở màn hình điều phối bếp (KDS). |
-| Pre-Condition(s) | Tài khoản có role Kitchen. |
-| Post-Condition(s) | Danh sách món cần nấu hiển thị theo nguyên tắc FIFO (thời gian gọi). |
-| Basic Flow | 1. Nhân viên bếp mở màn hình KDS.<br>2. Hệ thống lấy toàn bộ món đang ở trạng thái "Đang chuẩn bị", sắp xếp theo thời điểm gọi tăng dần, kèm số bàn, đợt gọi và ghi chú món.<br>3. Hệ thống hiển thị bộ đếm giờ (elapsed time) cho từng món để cảnh báo món chờ lâu. |
+| Trigger | Nhân viên Bếp mở màn hình trạm bếp KDS (`/kitchen`). |
+| Pre-Condition(s) | Tài khoản nhân sự bếp đã đăng nhập vào hệ thống. |
+| Post-Condition(s) | Màn hình hiển thị đầy đủ các đơn món đang chờ nấu theo thứ tự ưu tiên thời gian gọi. |
+| Basic Flow | 1. Nhân viên bếp truy cập màn hình KDS `/kitchen`.<br>2. Hệ thống tải danh sách các món đang cần nấu (`COOKING`), sắp xếp theo nguyên tắc đợt nào gọi trước làm trước (FIFO).<br>3. Hỗ trợ chuyển đổi giữa 2 chế độ xem: Xem theo từng bàn/đợt gọi (Order View) hoặc xem tổng hợp gom theo từng món (Aggregated View).<br>4. Hiển thị đồng hồ đếm thời gian trôi qua (Elapsed time) để cảnh báo các món chờ quá lâu. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR17.1: Tuân theo QĐ8 (trạng thái món). |
-| Non-Functional Requirement | - NFR17.1: Màn hình phải tự làm mới realtime khi có đơn mới, không cần thao tác thủ công. |
+| Business Rules | - BR17.1: Màn hình tự động cập nhật thời gian thực khi có đợt gọi món mới từ khách (UC05). |
+| Non-Functional Requirement | - NFR17.1: Giao diện tối ưu độ tương phản cao, chữ to rõ phù hợp môi trường bếp nóng ẩm. |
+
+---
 
 ### 3.2.18 UC18: Cập nhật trạng thái chế biến món
 
@@ -687,17 +794,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC18 |
 | Use Case Name | Cập nhật trạng thái chế biến món |
-| Description | Là nhân viên bếp, tôi muốn đánh dấu một món đã nấu xong để khách và Quản lý biết. |
-| Actor(s) | Nhân viên Bếp |
+| Description | Người điều phối ở Bếp cập nhật trạng thái món từ Đang nấu (COOKING) sang Đã chuẩn bị xong (SERVED) cho từng món lẻ hoặc hoàn tất cả đợt gọi. |
+| Actor(s) | Kitchen, Manager |
 | Priority | Must have |
-| Trigger | Nhân viên bếp nấu xong một món, chạm vào thẻ món trên màn hình KDS. |
-| Pre-Condition(s) | Món đang ở trạng thái "Đang chuẩn bị". |
-| Post-Condition(s) | Món chuyển sang trạng thái "Đã phục vụ"; khách hàng và Quản lý thấy cập nhật realtime. |
-| Basic Flow | 1. Nhân viên bếp chạm vào món đã hoàn thành.<br>2. Hệ thống cập nhật trạng thái món = "Đã phục vụ", ghi nhận thời điểm hoàn thành.<br>3. Hệ thống phát realtime cập nhật tới khách hàng (UC06) và Quản lý. |
+| Trigger | Đầu bếp hoàn thành xong một món ăn hoặc hoàn tất toàn bộ đợt gọi. |
+| Pre-Condition(s) | Món ăn đang ở trạng thái `COOKING` trên màn hình KDS. |
+| Post-Condition(s) | Món chuyển sang trạng thái `SERVED` (Sẵn sàng phục vụ); chuyển tín hiệu sang màn hình nhân viên phục vụ (UC38) và cập nhật phía khách hàng (UC06). |
+| Basic Flow | 1. Đầu bếp chạm vào nút "Xong món" trên thẻ món hoặc nút "Hoàn tất cả đợt".<br>2. Hệ thống chuyển trạng thái món sang `SERVED`.<br>3. Bắn tin nhắn WebSocket sang trạm phục vụ `/topic/waiter/orders` để nhân viên bưng món ra bàn.<br>4. Bắn WebSocket cập nhật thanh tiến độ phía khách hàng. |
 | Alternative Flow | Không có |
-| Exception Flow | 1a. Món đã bị Quản lý hủy trước đó (UC13).<br>- 1a1. Thẻ món tự động biến mất khỏi màn hình KDS, không cho thao tác.<br>- Use Case dừng lại. |
-| Business Rules | - BR18.1: Tuân theo QĐ8 (trạng thái món). |
-| Non-Functional Requirement | - NFR18.1: Thao tác cập nhật trạng thái chỉ cần một chạm (one-tap) để tối ưu tốc độ trong giờ cao điểm. |
+| Exception Flow | Không có |
+| Business Rules | - BR18.1: Thao tác cập nhật trạng thái thiết kế dạng 1-chạm (One-tap) để thao tác nhanh. |
+| Non-Functional Requirement | - NFR18.1: Độ trễ phát tín hiệu sang màn hình phục vụ dưới 300ms. |
+
+---
 
 ### 3.2.19 UC19: Báo hết món khẩn cấp
 
@@ -705,17 +814,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC19 |
 | Use Case Name | Báo hết món khẩn cấp |
-| Description | Là nhân viên bếp, tôi muốn tắt nhanh một món khi cạn nguyên liệu giữa ca để tránh khách tiếp tục đặt món đó. |
-| Actor(s) | Nhân viên Bếp |
-| Priority | Must have |
-| Trigger | Nhân viên bếp phát hiện nguyên liệu của một món đã cạn. |
-| Pre-Condition(s) | Tài khoản có role Kitchen. |
-| Post-Condition(s) | Món chuyển trạng thái "Hết hàng"; khách hàng không thể thêm món đó nữa. |
-| Basic Flow | 1. Nhân viên bếp chọn món cần báo hết trên màn hình KDS.<br>2. Nhân viên xác nhận "Báo hết hàng".<br>3. Hệ thống cập nhật trạng thái món = Hết hàng, phát sự kiện WebSocket broadcast tới toàn bộ khách hàng đang xem thực đơn.<br>4. Trên giao diện khách, nút "Thêm" của món đó bị vô hiệu hóa; món trong giỏ tạm (chưa gửi bếp) bị cảnh báo gỡ bỏ. |
+| Description | Bếp KDS báo hết món khẩn cấp: Tự động khóa món trên menu khách hàng (SOLD OUT), tự động gỡ món khỏi tất cả bàn đang đặt và bắn thông báo thời gian thực; có hỗ trợ mở bán lại (restock). |
+| Actor(s) | Kitchen, Manager |
+| Priority | High |
+| Trigger | Bếp phát hiện nguyên liệu của một món đã cạn kiệt trong ca làm việc. |
+| Pre-Condition(s) | Nhân viên bếp đang mở màn hình KDS. |
+| Post-Condition(s) | Món ăn chuyển sang trạng thái Hết hàng (`isAvailable = false`), tự động gỡ khỏi giỏ hàng nháp của mọi bàn và hiện watermark SOLD OUT; hỗ trợ mở bán lại khi có nguyên liệu. |
+| Basic Flow | 1. Nhân viên bếp mở tab "Quản lý nguyên liệu/Hết món" trên màn hình KDS.<br>2. Chọn món ăn cần báo hết và bấm "Báo hết món khẩn cấp".<br>3. Hệ thống cập nhật cơ sở dữ liệu `isAvailable = false`.<br>4. Bắn WebSocket broadcast toàn hệ thống: Giao diện menu khách hàng ngay lập tức đóng dấu SOLD OUT, tự động gỡ món đó khỏi các giỏ hàng nháp chưa gửi.<br>5. Khi nhập thêm nguyên liệu, bếp có thể bấm "Mở bán lại" (Restock) để kích hoạt món trở lại bình thường. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR19.1: Tuân theo QĐ4 (quy định Còn hàng/Hết hàng). |
-| Non-Functional Requirement | - NFR19.1: Việc đồng bộ trạng thái hết hàng tới toàn bộ thiết bị khách phải tức thời (dưới 1 giây) để tránh đặt nhầm. |
+| Business Rules | - BR19.1: Món báo hết chỉ ảnh hưởng đến các đơn chưa gửi; các đơn đã gửi bếp trước đó vẫn giữ nguyên để bếp chế biến nốt phần nguyên liệu còn lại. |
+| Non-Functional Requirement | - NFR19.1: Toàn bộ khách hàng nhận được thông báo hết món trong vòng dưới 1 giây. |
+
+---
 
 ### 3.2.20 UC20: Đăng xuất
 
@@ -723,17 +834,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC20 |
 | Use Case Name | Đăng xuất |
-| Description | Là quản lý/nhân viên bếp, tôi muốn đăng xuất khỏi hệ thống để bảo mật phiên làm việc. |
-| Actor(s) | Quản lý, Nhân viên Bếp |
+| Description | Người dùng nội bộ đăng xuất khỏi tài khoản, hệ thống hủy phiên đăng nhập, xóa JWT trong bộ nhớ/localStorage và đưa về trang Login. |
+| Actor(s) | Admin, Manager, Kitchen, Waiter |
 | Priority | Must have |
-| Trigger | Người dùng chọn nút "Đăng xuất". |
-| Pre-Condition(s) | Người dùng đang trong trạng thái đã đăng nhập. |
-| Post-Condition(s) | Phiên làm việc kết thúc. |
-| Basic Flow | 1. Người dùng chọn "Đăng xuất".<br>2. Client xóa JWT Token khỏi bộ nhớ cục bộ.<br>3. Hệ thống chuyển hướng về trang đăng nhập. |
+| Trigger | Người dùng bấm nút "Đăng xuất" trên thanh thông tin cá nhân. |
+| Pre-Condition(s) | Đang trong trạng thái đăng nhập. |
+| Post-Condition(s) | Xóa sạch JWT Token và thông tin phiên làm việc khỏi trình duyệt; điều hướng về trang đăng nhập `/login`. |
+| Basic Flow | 1. Người dùng bấm nút "Đăng xuất".<br>2. Client xóa Access Token và Refresh Token khỏi bộ nhớ cục bộ / cookie.<br>3. Hệ thống điều hướng trình duyệt về màn hình đăng nhập. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR20.1: Token JWT đã cấp vẫn còn hiệu lực tới khi hết hạn tự nhiên (hệ thống hiện không triển khai blacklist/revocation phía server) — hạn chế đã biết, được đánh đổi bằng thời gian sống (TTL) của token đủ ngắn. |
-| Non-Functional Requirement | - NFR20.1: Thời gian thực hiện đăng xuất phản hồi tức thời (dưới 1 giây). |
+| Business Rules | - BR20.1: Đảm bảo an toàn không lưu lại phiên làm việc trên các máy tính công cộng. |
+| Non-Functional Requirement | - NFR20.1: Phản hồi tức thời dưới 100ms. |
+
+---
 
 ### 3.2.21 UC21: Thêm món vào giỏ hàng
 
@@ -741,17 +854,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC21 |
 | Use Case Name | Thêm món vào giỏ hàng |
-| Description | Là khách hàng, tôi muốn thêm một món ăn với số lượng mong muốn vào giỏ hàng chung của bàn. |
+| Description | Chọn món và tùy chỉnh số lượng từ danh sách thực đơn đưa vào giỏ hàng chung của bàn. |
 | Actor(s) | Khách hàng |
 | Priority | Must have |
-| Trigger | Khách hàng nhấn nút "Thêm" trên một món tại thực đơn (UC02) hoặc trang chi tiết món (UC03). |
-| Pre-Condition(s) | Món đang ở trạng thái Còn hàng; bàn chưa bị khóa order. |
-| Post-Condition(s) | Món được thêm vào giỏ hàng chung, đồng bộ tới mọi thiết bị trong bàn. |
-| Basic Flow | 1. Khách hàng chọn món và số lượng mong muốn (mặc định 1), nhấn "Thêm vào giỏ".<br>2. Hệ thống kiểm tra món còn hàng và bàn chưa bị khóa order.<br>3. Hệ thống thêm/cộng dồn dòng món vào giỏ hàng chung của phiên bàn kèm ghi chú (nếu có).<br>4. Hệ thống phát sự kiện realtime cập nhật giỏ hàng tới toàn bộ thiết bị của bàn. |
+| Trigger | Khách hàng bấm nút `+` (Thêm món) trên thẻ món ăn hoặc trong modal chi tiết. |
+| Pre-Condition(s) | Món ăn đang ở trạng thái Còn hàng (`isAvailable = true`); bàn không bị khóa order. |
+| Post-Condition(s) | Món ăn được đưa vào giỏ hàng chung của bàn; đồng bộ số lượng lên thanh giỏ hàng nổi chân trang. |
+| Basic Flow | 1. Khách hàng bấm chọn món ăn và điều chỉnh số lượng mong muốn.<br>2. Hệ thống kiểm tra tính hợp lệ của món và trạng thái bàn.<br>3. Thêm món vào mảng giỏ hàng chung, tính lại tổng tiền tạm tính.<br>4. Phát sự kiện đồng bộ giỏ hàng tới các thiết bị khác trong bàn. |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Món vừa chuyển hết hàng ngay lúc thêm.<br>- 2a1. Hệ thống từ chối, báo "Món vừa hết hàng, vui lòng chọn món khác".<br>- Use Case dừng lại.<br>2b. Bàn đang bị khóa order.<br>- 2b1. Hệ thống báo "Bàn hiện không thể thêm món".<br>- Use Case dừng lại. |
-| Business Rules | - BR21.1: Tuân theo QĐ9 (giới hạn số lượng 1–99 mỗi lần thêm). |
-| Non-Functional Requirement | - NFR21.1: Đồng bộ giỏ hàng giữa các thiết bị trong bàn dưới 1 giây. |
+| Exception Flow | 2a. Món đã hết hàng: Nút bấm bị khóa, báo lỗi nếu cố tình click. |
+| Business Rules | - BR21.1: Giới hạn số lượng chọn từ 1 đến 99 phần cho mỗi dòng món. |
+| Non-Functional Requirement | - NFR21.1: Hiệu ứng thêm món vào giỏ mượt mà (Micro-animation). |
+
+---
 
 ### 3.2.22 UC22: Điều chỉnh số lượng món trong giỏ
 
@@ -759,17 +874,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC22 |
 | Use Case Name | Điều chỉnh số lượng món trong giỏ |
-| Description | Là khách hàng, tôi muốn tăng/giảm số lượng hoặc xóa một món chưa gửi bếp trong giỏ hàng. |
+| Description | Tăng, giảm số lượng hoặc bấm nút xóa từng món đang chờ gửi bếp trong giỏ hàng chung. |
 | Actor(s) | Khách hàng |
-| Priority | Should have |
-| Trigger | Khách hàng mở giỏ hàng (UC23), chạm nút +/- hoặc nhập số lượng cho một dòng món chưa gửi bếp. |
-| Pre-Condition(s) | Dòng món đang ở trạng thái "chưa gửi" (còn trong giỏ tạm, chưa qua UC05). |
-| Post-Condition(s) | Số lượng dòng món được cập nhật (hoặc dòng bị xóa nếu về 0); tổng tiền tạm tính được tính lại. |
-| Basic Flow | 1. Khách hàng mở giỏ hàng, chọn dòng món cần sửa.<br>2. Khách hàng tăng/giảm số lượng hoặc nhập trực tiếp.<br>3. Hệ thống kiểm tra giá trị hợp lệ (1 ≤ N ≤ 99).<br>4. Hệ thống cập nhật thành tiền dòng đó (đơn giá × số lượng) và tính lại tổng giỏ hàng.<br>5. Hệ thống phát realtime đồng bộ tới các thiết bị khác trong bàn. |
-| Alternative Flow | 2a. Khách hàng giảm số lượng về 0 → dòng món bị xóa khỏi giỏ hàng. |
-| Exception Flow | 3a. Người dùng nhập số âm, số 0 (ngoài thao tác xóa), số thập phân hoặc ký tự chữ.<br>- 3a1. Hệ thống từ chối và giữ nguyên giá trị cũ. |
-| Business Rules | - BR22.1: Tuân theo QĐ9 (giới hạn số lượng). |
-| Non-Functional Requirement | - NFR22.1: Thao tác +/- phải phản hồi tức thời trên giao diện (optimistic UI) trước khi xác nhận từ server. |
+| Priority | Must have |
+| Trigger | Khách hàng bấm nút `+`, `-` hoặc biểu tượng thùng rác xóa món trong giỏ hàng. |
+| Pre-Condition(s) | Giỏ hàng đang có ít nhất 1 món ăn chưa gửi bếp. |
+| Post-Condition(s) | Số lượng món được cập nhật hoặc món bị xóa khỏi giỏ; tổng tiền tạm tính tự động cập nhật lại. |
+| Basic Flow | 1. Khách hàng mở giỏ hàng.<br>2. Bấm nút `+` để tăng số lượng, hoặc nút `-` để giảm số lượng.<br>3. Nếu giảm số lượng về 0 hoặc bấm nút thùng rác: Hệ thống xóa dòng món đó khỏi giỏ hàng.<br>4. Tính lại tổng tiền tạm tính và đồng bộ tới toàn bộ thiết bị trong bàn. |
+| Alternative Flow | Không có |
+| Exception Flow | Không có |
+| Business Rules | - BR22.1: Chỉ cho phép điều chỉnh các món nằm trong giỏ nháp (chưa bấm gửi bếp). |
+| Non-Functional Requirement | - NFR22.1: Phản hồi tức thì không gián đoạn giao diện người dùng. |
+
+---
 
 ### 3.2.23 UC23: Xem giỏ hàng & tổng hóa đơn tạm tính
 
@@ -777,17 +894,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC23 |
 | Use Case Name | Xem giỏ hàng & tổng hóa đơn tạm tính |
-| Description | Là khách hàng, tôi muốn xem toàn bộ món (đã gửi và chưa gửi) cùng tổng hóa đơn tạm tính của cả bàn. |
+| Description | Mở xem chi tiết các món trong giỏ hàng hiện tại, các món đã gửi qua các đợt gọi trước và tổng tiền tạm tính tương ứng. |
 | Actor(s) | Khách hàng |
 | Priority | Must have |
-| Trigger | Khách hàng chạm biểu tượng giỏ hàng. |
-| Pre-Condition(s) | Phiên bàn hợp lệ. |
-| Post-Condition(s) | Danh sách món (chưa gửi + đã gửi các đợt trước) và tổng hóa đơn tạm tính toàn bàn được hiển thị. |
-| Basic Flow | 1. Khách hàng mở giỏ hàng.<br>2. Hệ thống lấy toàn bộ dòng món trong giỏ tạm (chưa gửi) và toàn bộ Order Round đã gửi của phiên bàn.<br>3. Hệ thống tính tổng tiền tạm tính theo QĐ1 (chưa gồm chiết khấu/VAT cuối cùng).<br>4. Hệ thống hiển thị danh sách kèm trạng thái từng món (đã gửi: Đang chuẩn bị/Đã phục vụ; chưa gửi: có thể sửa/xóa) và nút "Gửi đơn" (UC05). |
+| Trigger | Khách hàng nhấn vào thanh giỏ hàng nổi ở chân trang hoặc biểu tượng giỏ hàng. |
+| Pre-Condition(s) | Thiết bị đang trong phiên bàn hợp lệ. |
+| Post-Condition(s) | Ngăn kéo giỏ hàng (Cart Drawer) mở ra, hiển thị rõ ràng 2 phần: Các món đang chọn dở và các món đã gửi bếp. |
+| Basic Flow | 1. Khách hàng mở giỏ hàng.<br>2. Hệ thống hiển thị danh sách các món đang chọn (có thể sửa/xóa) và danh sách các món đã gửi bếp qua các đợt trước (kèm trạng thái nấu).<br>3. Hiển thị tổng tiền tạm tính chính xác của toàn bộ bữa ăn.<br>4. Cung cấp nút bấm "Gửi đơn vào bếp" (UC05) nếu giỏ nháp có món. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR23.1: Tuân theo QĐ1 (công thức tính tổng tiền hóa đơn). |
-| Non-Functional Requirement | - NFR23.1: Tổng tiền hiển thị phải cập nhật tức thời mỗi khi giỏ hàng hoặc trạng thái món thay đổi. |
+| Business Rules | - BR23.1: Số tiền hiển thị tính theo đơn giá niêm yết tại thời điểm chọn món. |
+| Non-Functional Requirement | - NFR23.1: Định dạng tiền tệ tiếng Việt chuẩn (VD: `450.000 ₫`). |
+
+---
 
 ### 3.2.24 UC24: Quản lý danh sách món ăn
 
@@ -795,17 +914,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC24 |
 | Use Case Name | Quản lý danh sách món ăn |
-| Description | Là quản lý, tôi muốn thêm/sửa/xóa món ăn trong thực đơn. |
-| Actor(s) | Quản lý |
+| Description | Thêm mới, cập nhật giá, mô tả, hình ảnh (upload Cloudinary), thuộc tính danh mục và xóa món ăn khỏi thực đơn. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Quản lý chọn "Danh sách món ăn" trong Quản lý thực đơn (UC10). |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Món ăn được thêm mới/cập nhật/xóa (ẩn) trong hệ thống, đồng bộ ngay ra thực đơn khách. |
-| Basic Flow | 1. Quản lý xem danh sách món (BM2), chọn "Thêm món" hoặc chọn một món để "Sửa"/"Xóa".<br>2. Với thêm/sửa: nhập tên món, mô tả, đơn giá, tải một ảnh minh họa, gán danh mục (UC25).<br>3. Hệ thống lưu vào Database (sinh mã món mới nếu là thêm mới).<br>4. Hệ thống phát realtime cập nhật thực đơn tới toàn bộ khách hàng đang xem. |
-| Alternative Flow | Không có |
-| Exception Flow | 3a. Thiếu trường bắt buộc (tên món, giá) hoặc ảnh sai định dạng/quá dung lượng.<br>- 3a1. Hệ thống từ chối lưu và báo lỗi cụ thể.<br>- Use Case dừng lại. |
-| Business Rules | - BR24.1: Xóa món chỉ nên là "ẩn" (soft delete) để không phá vỡ dữ liệu lịch sử order đã tham chiếu tới món đó. |
-| Non-Functional Requirement | - NFR24.1: Ảnh món ăn nên được tối ưu/nén trước khi lưu để đảm bảo tốc độ tải thực đơn. |
+| Trigger | Quản lý bấm nút "Thêm Món Ăn Mới" hoặc nút "Sửa" / "Xóa" trên dòng món ăn. |
+| Pre-Condition(s) | Đang ở trang Quản lý thực đơn `/admin/menu`. |
+| Post-Condition(s) | Dữ liệu món ăn được thêm mới, cập nhật hoặc xóa khỏi cơ sở dữ liệu MySQL. |
+| Basic Flow | 1. Quản lý bấm nút "+ Thêm Món Ăn Mới" (hoặc nút Chỉnh sửa trên dòng món).<br>2. Nhập các trường: Tên món ăn (*), Danh mục, Đơn vị tính, Giá bán (*), Mô tả và chọn ảnh minh họa.<br>3. Bấm "Lưu Món Ăn".<br>4. Hệ thống tải ảnh lên CDN (UC41) nếu có chọn file từ máy, lưu bản ghi vào Database và đóng modal.<br>5. Hiển thị thông báo Toast thành công và làm mới danh sách. |
+| Alternative Flow | 1a. Xóa món ăn: Quản lý bấm nút Thùng rác, xác nhận hộp thoại `window.confirm`, hệ thống gọi API xóa món khỏi Database. |
+| Exception Flow | 3a. Bỏ trống Tên hoặc Giá <= 0: Hệ thống chặn submit và báo lỗi màu đỏ tương ứng. |
+| Business Rules | - BR24.1: Tên món không được để trống, giá bán phải lớn hơn 0 ₫. |
+| Non-Functional Requirement | - NFR24.1: Xử lý lưu món và ảnh CDN hoàn tất trong dưới 2 giây. |
+
+---
 
 ### 3.2.25 UC25: Quản lý danh mục món ăn
 
@@ -813,17 +934,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC25 |
 | Use Case Name | Quản lý danh mục món ăn |
-| Description | Là quản lý, tôi muốn thêm/sửa/xóa danh mục và gán món ăn vào một hoặc nhiều danh mục. |
-| Actor(s) | Quản lý |
-| Priority | Should have |
-| Trigger | Quản lý chọn "Danh mục" trong Quản lý thực đơn (UC10). |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Danh mục được thêm/sửa/xóa; món ăn có thể được gán vào nhiều danh mục. |
-| Basic Flow | 1. Quản lý xem danh sách danh mục hiện có, chọn "Thêm danh mục" hoặc sửa/xóa một danh mục.<br>2. Quản lý nhập tên danh mục, mô tả, thứ tự hiển thị.<br>3. Quản lý gán/bỏ gán món ăn vào danh mục (quan hệ N-N) qua giao diện đa chọn.<br>4. Hệ thống lưu và cập nhật thứ tự tab danh mục trên thực đơn khách. |
+| Description | Thêm mới, cập nhật tên/mô tả danh mục, bật/tắt hiển thị danh mục và gán món ăn vào danh mục tương ứng. |
+| Actor(s) | Admin, Manager |
+| Priority | Must have |
+| Trigger | Quản lý chuyển sang tab "Quản Lý Danh Mục" trên trang `/admin/menu`. |
+| Pre-Condition(s) | Tài khoản có quyền Quản lý thực đơn. |
+| Post-Condition(s) | Danh mục được tạo mới, cập nhật hoặc xóa; cập nhật thanh Ribbon danh mục trên toàn hệ thống. |
+| Basic Flow | 1. Quản lý chuyển sang tab "Danh Mục".<br>2. Bấm "Thêm danh mục mới", nhập Tên danh mục, Mô tả, Thứ tự ưu tiên hiển thị.<br>3. Nhấn "Lưu Danh Mục".<br>4. Hệ thống lưu vào Database và cập nhật ngay dải thanh lọc danh mục. |
 | Alternative Flow | Không có |
-| Exception Flow | 3a. Xóa danh mục đang có món gán.<br>- 3a1. Hệ thống cảnh báo và yêu cầu xác nhận (món chỉ mất gán tới danh mục đó, không bị xóa khỏi hệ thống). |
-| Business Rules | - BR25.1: Tuân theo QĐ5 — danh mục "Bán chạy" là danh mục hệ thống tự tổng hợp, Quản lý không gán món thủ công vào danh mục này. |
-| Non-Functional Requirement | - NFR25.1: Thứ tự danh mục có thể kéo-thả (drag & drop) để sắp xếp ưu tiên hiển thị. |
+| Exception Flow | 2a. Xóa danh mục đang chứa món ăn: Hệ thống cảnh báo và yêu cầu chuyển món sang danh mục khác trước khi xóa. |
+| Business Rules | - BR25.1: Tên danh mục là duy nhất trong hệ thống. |
+| Non-Functional Requirement | - NFR25.1: Giao diện kéo thả hoặc nhập thứ tự ưu tiên hiển thị dễ dàng. |
+
+---
 
 ### 3.2.26 UC26: Cập nhật trạng thái Còn hàng/Hết hàng
 
@@ -831,17 +954,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC26 |
 | Use Case Name | Cập nhật trạng thái Còn hàng/Hết hàng |
-| Description | Là quản lý, tôi muốn bật/tắt nhanh trạng thái còn hàng của một món ngay trên danh sách. |
-| Actor(s) | Quản lý |
+| Description | Toggle bật/tắt nhanh trạng thái còn hàng hoặc hết hàng của món ăn từ trang quản trị thực đơn. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Quản lý chọn nhanh công tắc trạng thái của một món trong danh sách (UC24). |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Trạng thái món thay đổi, đồng bộ realtime tới khách hàng. |
-| Basic Flow | 1. Quản lý bật/tắt công tắc "Còn hàng" của một món.<br>2. Hệ thống cập nhật trạng thái món, phát sự kiện WebSocket broadcast.<br>3. Trên giao diện khách, món chuyển hiển thị tương ứng (mờ và không thể thêm nếu hết hàng). |
+| Trigger | Quản lý bấm vào nút gạt switch tại cột trạng thái của món ăn trên bảng danh sách. |
+| Pre-Condition(s) | Đang mở danh sách món ăn tại `/admin/menu`. |
+| Post-Condition(s) | Trạng thái món chuyển đổi giữa Đang Bán (`isAvailable = true`) và Tạm Khóa (`isAvailable = false`), đồng bộ tức thời ra màn hình khách hàng. |
+| Basic Flow | 1. Quản lý nhấp vào công tắc switch của món ăn cần đổi trạng thái.<br>2. Giao diện đổi màu switch (Xanh ngọc sang Đỏ mờ và ngược lại).<br>3. Hệ thống gọi API `PATCH /api/v1/menu-items/{id}/status` và bắn thông điệp WebSocket `/topic/menu-items`.<br>4. Hiển thị Toast thông báo: *"Đã tạm khóa phục vụ: [Tên món]"* hoặc *"Đã mở bán: [Tên món]"*.<br>5. Thẻ thống kê số lượng món Đang bán / Tạm khóa tự động cập nhật lại. |
 | Alternative Flow | Không có |
-| Exception Flow | Không có |
-| Business Rules | - BR26.1: Tuân theo QĐ4 (quy định Còn hàng/Hết hàng). |
-| Non-Functional Requirement | - NFR26.1: Việc bật/tắt trạng thái phải thực hiện được ngay trên danh sách, không cần mở form chỉnh sửa đầy đủ. |
+| Exception Flow | 3a. Lỗi kết nối mạng: Hệ thống tự động rollback trạng thái switch về vị trí ban đầu và hiển thị thông báo lỗi. |
+| Business Rules | - BR26.1: Cập nhật trạng thái phải diễn ra tức thời 0ms trên giao diện quản trị (Optimistic UI). |
+| Non-Functional Requirement | - NFR26.1: Màn hình khách hàng nhận được tín hiệu khóa/mở món trong dưới 500ms. |
+
+---
 
 ### 3.2.27 UC27: Quản lý danh sách bàn ăn
 
@@ -849,17 +974,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC27 |
 | Use Case Name | Quản lý danh sách bàn ăn |
-| Description | Là quản lý, tôi muốn thêm/sửa/xóa bàn ăn trong hệ thống. |
-| Actor(s) | Quản lý |
+| Description | Tạo mới bàn, cập nhật tên bàn, khu vực (Tầng trệt, Tầng 1, VIP...), sức chứa chỗ ngồi tối đa. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Quản lý chọn "Danh sách bàn ăn" trong Quản lý bàn ăn (UC11). |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Bàn ăn được thêm mới/sửa/xóa (BM3). |
-| Basic Flow | 1. Quản lý xem danh sách bàn hiện có, chọn "Thêm bàn" hoặc sửa/xóa một bàn.<br>2. Quản lý nhập mã bàn, tên hiển thị, khu vực (Khu chung/Phòng VIP), sức chứa tối đa.<br>3. Với bàn mới, hệ thống tự sinh mã QR và session token ban đầu theo QĐ2.<br>4. Hệ thống lưu và hiển thị lại danh sách. |
+| Trigger | Quản lý bấm "+ Thêm Bàn Mới" hoặc nút Sửa bàn trên trang `/admin/tables`. |
+| Pre-Condition(s) | Đang ở trang Quản lý bàn ăn. |
+| Post-Condition(s) | Bản ghi bàn ăn được lưu vào Database; tự động sinh mã QR Code và mã PIN 4 số khởi tạo ban đầu. |
+| Basic Flow | 1. Quản lý bấm nút "+ Thêm Bàn Mới".<br>2. Nhập số hiệu bàn (VD: "B12"), Tên hiển thị, Chọn khu vực (Tầng trệt, Tầng 1, Sân thượng, VIP) và Số chỗ ngồi tối đa.<br>3. Nhấn "Lưu Bàn".<br>4. Hệ thống tạo bàn mới, tự động sinh mã Passcode PIN ngẫu nhiên và sinh URL mã QR cho bàn.<br>5. Hiển thị bàn mới lên danh sách quản lý. |
 | Alternative Flow | Không có |
-| Exception Flow | 4a. Xóa một bàn đang ở trạng thái "Đang có khách".<br>- 4a1. Hệ thống từ chối xóa, yêu cầu đóng bàn trước.<br>- Use Case dừng lại. |
-| Business Rules | - BR27.1: Tuân theo QĐ7 (trạng thái bàn ăn). |
-| Non-Functional Requirement | - NFR27.1: Danh sách bàn hỗ trợ lọc theo khu vực và trạng thái. |
+| Exception Flow | 2a. Trùng số hiệu bàn: Báo lỗi *"Mã bàn ăn đã tồn tại trong hệ thống!"*. |
+| Business Rules | - BR27.1: Mỗi bàn có một mã số định danh duy nhất và không được trùng lặp. |
+| Non-Functional Requirement | - NFR27.1: Tự động phân loại bàn theo khu vực hiển thị. |
+
+---
 
 ### 3.2.28 UC28: Cấp lại mã QR cho bàn
 
@@ -867,17 +994,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC28 |
 | Use Case Name | Cấp lại mã QR cho bàn |
-| Description | Là quản lý, tôi muốn cấp lại mã QR cho một hoặc nhiều bàn khi nghi ngờ mã QR bị lộ ra ngoài nhà hàng. |
-| Actor(s) | Quản lý |
-| Priority | Must have |
-| Trigger | Quản lý chọn một hoặc nhiều bàn, nhấn "Cấp lại mã QR". |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Token cũ của (các) bàn bị thu hồi (revoke); token mới được sinh; mã QR mới sẵn sàng để in/hiển thị. |
-| Basic Flow | 1. Quản lý chọn một hoặc nhiều bàn cần cấp lại QR.<br>2. Quản lý xác nhận "Cấp lại mã QR".<br>3. Hệ thống sinh session_token mới theo chuẩn UUID v4 kết hợp mã băm cho từng bàn đã chọn, đồng thời vô hiệu hóa token cũ.<br>4. Mọi thiết bị khách đang mở bằng mã QR cũ của (các) bàn đó bị ngắt kết nối ngay lập tức.<br>5. Hệ thống xuất mã QR mới (dạng SVG/PNG) để Quản lý tải về in ấn. |
+| Description | Sinh lại mã PIN 4 số và thu hồi token phiên cũ của bàn, hỗ trợ xem và in lại tem mã QR mới dán tại bàn. |
+| Actor(s) | Admin, Manager |
+| Priority | High |
+| Trigger | Quản lý bấm nút "Cấp lại mã QR / Đổi mã PIN" trên thẻ bàn ăn. |
+| Pre-Condition(s) | Tài khoản có quyền Quản lý bàn. |
+| Post-Condition(s) | Mã PIN 4 số cũ và token phiên cũ bị thu hồi ngay lập tức; sinh mã PIN và token mới; ngắt kết nối các thiết bị lạ ngoài nhà hàng. |
+| Basic Flow | 1. Quản lý chọn bàn cần cấp lại mã và bấm "Cấp lại mã QR / PIN".<br>2. Xác nhận thao tác trên hộp thoại cảnh báo.<br>3. Server sinh mã Passcode PIN 4 số an toàn mới, thu hồi token phiên cũ.<br>4. Mọi thiết bị cũ đang kết nối lập tức bị đẩy ra khỏi phiên bàn.<br>5. Giao diện hiển thị modal chứa mã QR mới và mã PIN mới để quản lý in hoặc xem trực tiếp. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR28.1: Tuân theo QĐ2 (vòng đời QR & bảo mật chống lộ QR). |
-| Non-Functional Requirement | - NFR28.1: Hỗ trợ cấp lại hàng loạt (nhiều bàn cùng lúc) để xử lý nhanh sự cố. |
+| Business Rules | - BR28.1: Cơ chế xoay vòng mã PIN và thu hồi token bảo vệ chống lộ mã QR ra bên ngoài nhà hàng. |
+| Non-Functional Requirement | - NFR28.1: Mã PIN 4 số sinh ngẫu nhiên bảo đảm tính bảo mật cao. |
+
+---
 
 ### 3.2.29 UC29: Bật/tắt quyền order của bàn
 
@@ -885,17 +1014,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC29 |
 | Use Case Name | Bật/tắt quyền order của bàn |
-| Description | Là quản lý, tôi muốn khóa/mở quyền gọi món của một bàn khi xảy ra tranh chấp hoặc lộ link. |
-| Actor(s) | Quản lý |
-| Priority | Should have |
-| Trigger | Quản lý chọn công tắc "Khóa order" trên một bàn. |
-| Pre-Condition(s) | Tài khoản có role Manager. |
-| Post-Condition(s) | Cờ is_order_locked của bàn được bật/tắt. |
-| Basic Flow | 1. Quản lý chọn bàn cần khóa/mở order.<br>2. Quản lý bật công tắc "Khóa order".<br>3. Hệ thống cập nhật is_order_locked = true, đồng bộ realtime tới thiết bị khách của bàn đó (nút "Gửi đơn vào bếp" bị vô hiệu hóa).<br>4. Các món đã gửi trước đó vẫn được giữ nguyên trạng thái, không bị ảnh hưởng. |
+| Description | Khóa hoặc mở khóa quyền gọi món khẩn cấp của bàn (is_order_locked) để tạm dừng hoặc cho phép khách tiếp tục gọi món. |
+| Actor(s) | Admin, Manager |
+| Priority | High |
+| Trigger | Quản lý bật/tắt nút switch "Khóa Order" trên thẻ bàn ăn. |
+| Pre-Condition(s) | Đang ở trang Sơ đồ bàn hoặc Quản lý bàn. |
+| Post-Condition(s) | Cờ `is_order_locked` của bàn được cập nhật; phía khách hàng bị khóa/mở nút "Gửi đơn vào bếp" tức thì. |
+| Basic Flow | 1. Quản lý bấm switch "Khóa Order" của bàn.<br>2. Hệ thống cập nhật `is_order_locked = true` trong Database.<br>3. Bắn WebSocket tới kênh của bàn đó.<br>4. Màn hình khách hàng lập tức hiển thị cảnh báo bàn đang tạm khóa order, vô hiệu hóa nút gửi đơn vào bếp.<br>5. Khi quản lý mở lại, cờ chuyển về `false` và khách hàng tiếp tục gọi món bình thường. |
 | Alternative Flow | Không có |
 | Exception Flow | Không có |
-| Business Rules | - BR29.1: Tuân theo QĐ3 (kiểm soát quyền gọi món khẩn cấp của bàn). |
-| Non-Functional Requirement | - NFR29.1: Việc khóa/mở order có hiệu lực tức thời trên thiết bị khách (dưới 1 giây). |
+| Business Rules | - BR29.1: Khóa order chỉ ngăn việc gọi thêm món mới, không ảnh hưởng đến các món đã gửi trước đó. |
+| Non-Functional Requirement | - NFR29.1: Thời gian khóa phản hồi tức thì dưới 500ms. |
+
+---
 
 ### 3.2.30 UC30: Thanh toán bằng tiền mặt
 
@@ -903,17 +1034,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC30 |
 | Use Case Name | Thanh toán bằng tiền mặt |
-| Description | Là quản lý, tôi muốn ghi nhận thanh toán bằng tiền mặt cho hóa đơn của bàn. |
-| Actor(s) | Quản lý |
+| Description | Chọn thanh toán tiền mặt, nhập tiền khách đưa, tính tiền thừa và xác nhận hoàn tất hóa đơn. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Trong UC15, Quản lý chọn phương thức "Tiền mặt". |
-| Pre-Condition(s) | Đã tính tổng hóa đơn theo QĐ1. |
-| Post-Condition(s) | Giao dịch thanh toán được ghi nhận với phương thức Tiền mặt, trạng thái Đã thanh toán. |
-| Basic Flow | 1. Quản lý chọn "Tiền mặt".<br>2. Quản lý nhận tiền mặt từ khách, nhập số tiền khách đưa (tùy chọn, để tính tiền thối).<br>3. Quản lý nhấn "Xác nhận đã thu tiền".<br>4. Hệ thống ghi nhận giao dịch thanh toán (phương thức Tiền mặt, thời gian giao dịch, tổng tiền).<br>5. Hệ thống chuyển sang UC32 (In hóa đơn & đóng bàn). |
+| Trigger | Thu ngân chọn tab "Tiền Mặt" trong modal thanh toán hóa đơn. |
+| Pre-Condition(s) | Đang mở modal thanh toán của bàn (UC15). |
+| Post-Condition(s) | Giao dịch thanh toán được ghi nhận bằng Tiền mặt, tính toán chính xác tiền thối trả khách. |
+| Basic Flow | 1. Thu ngân chọn hình thức "Tiền mặt".<br>2. Nhập số tiền khách đưa vào ô nhập liệu (hoặc bấm các nút gợi ý mệnh giá nhanh: 100k, 200k, 500k).<br>3. Hệ thống tự động tính số tiền thừa cần trả lại khách = (Tiền khách đưa - Tổng tiền thanh toán).<br>4. Thu ngân bấm "Xác nhận đã thu tiền".<br>5. Chuyển tiếp sang bước in hóa đơn và đóng bàn (UC32). |
 | Alternative Flow | Không có |
-| Exception Flow | Không có |
-| Business Rules | - BR30.1: Tuân theo QĐ1 (công thức tính tổng tiền hóa đơn). |
-| Non-Functional Requirement | - NFR30.1: Giao diện phải hiện rõ số tiền cần thu và tiền thối (nếu có nhập số tiền khách đưa). |
+| Exception Flow | 2a. Tiền khách đưa nhỏ hơn tổng tiền phải thanh toán: Nút xác nhận bị khóa, báo chưa đủ tiền. |
+| Business Rules | - BR30.1: Tiền thối được tính toán tự động chính xác theo số học. |
+| Non-Functional Requirement | - NFR30.1: Giao diện hỗ trợ phím tắt và nút bấm nhanh mệnh giá tiền. |
+
+---
 
 ### 3.2.31 UC31: Thanh toán bằng VietQR
 
@@ -921,17 +1054,19 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC31 |
 | Use Case Name | Thanh toán bằng VietQR |
-| Description | Là quản lý, tôi muốn tạo mã VietQR động để khách quét chuyển khoản đúng số tiền hóa đơn. |
-| Actor(s) | Quản lý |
+| Description | Hiển thị mã VietQR động chuẩn Napas247 kèm số tài khoản, số tiền và nội dung hóa đơn để khách quét thanh toán chuyển khoản ngân hàng. |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Trong UC15, Quản lý chọn phương thức "VietQR". |
-| Pre-Condition(s) | Đã tính tổng hóa đơn theo QĐ1. |
-| Post-Condition(s) | Giao dịch thanh toán được ghi nhận với phương thức VietQR, chuyển trạng thái Đã thanh toán khi xác nhận. |
-| Basic Flow | 1. Quản lý chọn "VietQR".<br>2. Hệ thống sinh mã VietQR động (chuẩn Napas247) chứa chính xác số tiền cần thanh toán và nội dung chuyển khoản (mã bàn + số hóa đơn).<br>3. Màn hình hiển thị mã QR để khách quét bằng ứng dụng ngân hàng.<br>4. Quản lý xác nhận thủ công đã nhận được tiền vào tài khoản (hoặc hệ thống nhận webhook nếu có tích hợp cổng thanh toán).<br>5. Hệ thống ghi nhận giao dịch, chuyển sang UC32. |
+| Trigger | Thu ngân chọn tab "VietQR" trong modal thanh toán. |
+| Pre-Condition(s) | Đang mở modal thanh toán hóa đơn. Cấu hình ngân hàng thụ hưởng đã được thiết lập. |
+| Post-Condition(s) | Mã VietQR động chuẩn Napas247 được sinh và hiển thị trên màn hình để khách quét thanh toán chuyển khoản. |
+| Basic Flow | 1. Thu ngân chọn phương thức "Chuyển khoản VietQR".<br>2. Hệ thống tự động sinh chuỗi mã VietQR động chứa chính xác: Số tài khoản ngân hàng, Mã ngân hàng (BIN), Số tiền hóa đơn và Nội dung chuyển khoản (Mã bàn + Mã đơn).<br>3. Màn hình hiển thị mã QR cỡ lớn để khách hàng quét bằng app Mobile Banking.<br>4. Sau khi tài khoản nhận được tiền, thu ngân bấm "Xác nhận đã nhận chuyển khoản".<br>5. Hệ thống hoàn tất hóa đơn và chuyển sang UC32. |
 | Alternative Flow | Không có |
-| Exception Flow | 4a. Khách quét nhưng chưa chuyển khoản hoặc hủy giữa chừng.<br>- 4a1. Quản lý có thể quay lại chọn phương thức khác (UC30) hoặc tạo lại mã VietQR mới.<br>- Use Case dừng lại. |
-| Business Rules | - BR31.1: Mã VietQR phải luôn khớp chính xác số tiền hóa đơn hiện hành (QĐ1) để tránh sai lệch thu tiền. |
-| Non-Functional Requirement | - NFR31.1: Mã QR phải được sinh và hiển thị trong vòng 2 giây. |
+| Exception Flow | 3a. Khách quét hủy giao dịch: Thu ngân có thể chuyển đổi sang phương thức Tiền mặt (UC30). |
+| Business Rules | - BR31.1: Mã VietQR luôn chứa đúng số tiền lẻ đến từng đồng để tránh sai lệch kế toán. |
+| Non-Functional Requirement | - NFR31.1: Mã VietQR sinh ra tức thì trong dưới 500ms. |
+
+---
 
 ### 3.2.32 UC32: In hóa đơn & đóng bàn
 
@@ -939,122 +1074,214 @@ NVPV -- UC38
 |---|---|
 | Use Case ID | UC32 |
 | Use Case Name | In hóa đơn & đóng bàn |
-| Description | Là quản lý, tôi muốn in hóa đơn hoàn tất và đóng bàn sau khi đã xác nhận thu tiền. |
-| Actor(s) | Quản lý |
+| Description | Lưu thông tin hóa đơn vào cơ sở dữ liệu, in hóa đơn nhiệt khổ 80mm cho khách, đóng phiên và chuyển trạng thái bàn sang dọn dẹp (CLEANING). |
+| Actor(s) | Admin, Manager |
 | Priority | Must have |
-| Trigger | Sau khi xác nhận đã thu tiền ở UC30 hoặc UC31. |
-| Pre-Condition(s) | Giao dịch thanh toán đã ở trạng thái Đã thanh toán. |
-| Post-Condition(s) | Hóa đơn được in (khổ 80mm); bàn chuyển sang trạng thái "Đang dọn dẹp"; mã QR/token của bàn bị thu hồi. |
-| Basic Flow | 1. Hệ thống tổng hợp hóa đơn hoàn chỉnh (chi tiết món, tổng tiền, phương thức thanh toán).<br>2. Quản lý nhấn "In hóa đơn", hệ thống gửi lệnh in tới máy in nhiệt khổ 80mm.<br>3. Hệ thống lưu doanh thu của phiên bàn vào báo cáo (phục vụ UC16).<br>4. Hệ thống chuyển trạng thái bàn sang "Đang dọn dẹp", thu hồi session_token hiện tại (theo QĐ2).<br>5. Sau khi bàn được dọn xong, hệ thống/Quản lý chuyển bàn về "Bàn trống" và sinh sẵn token QR mới cho lượt khách kế tiếp. |
+| Trigger | Thu ngân hoàn tất thu tiền ở UC30 hoặc UC31. |
+| Pre-Condition(s) | Giao dịch thanh toán đã được xác nhận thành công. |
+| Post-Condition(s) | Bản ghi hóa đơn được lưu vào bảng `invoices`; lệnh in gửi tới máy in nhiệt 80mm; bàn chuyển sang `CLEANING`. |
+| Basic Flow | 1. Hệ thống lưu hóa đơn với trạng thái `PAID` và ghi nhận doanh thu.<br>2. Bật cửa sổ xem trước hóa đơn nhiệt khổ 80mm và gửi lệnh in ra máy in hóa đơn.<br>3. Thu hồi session token cũ của bàn, sinh mã PIN mới.<br>4. Cập nhật trạng thái bàn sang `CLEANING` (Đang dọn dẹp).<br>5. Bắn WebSocket kết thúc phiên bàn tới toàn bộ thiết bị khách hàng. |
 | Alternative Flow | Không có |
-| Exception Flow | 2a. Máy in không phản hồi hoặc hết giấy.<br>- 2a1. Hệ thống báo lỗi in nhưng vẫn cho phép đóng bàn, đồng thời cho phép "In lại" hóa đơn sau đó từ lịch sử. |
-| Business Rules | - BR32.1: Tuân theo QĐ2 (thu hồi token khi đóng bàn) và QĐ7 (chuyển trạng thái bàn). |
-| Non-Functional Requirement | - NFR32.1: Hệ thống phải tương thích các dòng máy in nhiệt cổng LAN/USB phổ biến (Xprinter, Epson). |
+| Exception Flow | 2a. Máy in hết giấy: Hệ thống vẫn lưu thành công hóa đơn và cho phép in lại sau từ màn hình lịch sử (UC40). |
+| Business Rules | - BR32.1: Hóa đơn đã đóng không thể sửa đổi số tiền (tính bất biến). |
+| Non-Functional Requirement | - NFR32.1: Tương thích hoàn hảo với các dòng máy in nhiệt khổ K80 thông dụng. |
 
-### 3.2.33 UC33: Chuyển bàn (Table Move / Transfer 1:1)
+---
+
+### 3.2.33 UC33: Xác thực mật mã bàn (Table Passcode PIN)
 
 | Thành phần | Nội dung |
 |---|---|
 | Use Case ID | UC33 |
-| Use Case Name | Chuyển bàn (Table Move / Transfer 1:1) |
-| Description | Khách hàng (Chủ Bàn) hoặc Quản lý thực hiện chuyển toàn bộ đợt order đã gọi và giỏ hàng đang chọn từ bàn cũ sang bàn mới còn trống, áp dụng cơ chế khóa 2 giai đoạn (2-Phase Lock). |
-| Actor(s) | Khách hàng (Chủ Bàn), Quản lý / Thu ngân |
-| Priority | High |
-| Trigger | Khách hàng có nhu cầu đổi sang bàn khác (view đẹp hơn, mát hơn) hoặc Quản lý điều chuyển bàn trên sơ đồ POS. |
-| Pre-Condition(s) | Bàn cũ ở trạng thái `OCCUPIED`. Bàn đích ở trạng thái `AVAILABLE`. Thiết bị yêu cầu phải là Chủ Bàn (`isHost = true`) hoặc tài khoản nhân sự có thẩm quyền. |
-| Post-Condition(s) | Toàn bộ order và giỏ hàng được gán sang bàn đích; bàn cũ chuyển trạng thái `CLEANING`; mã PIN và session token bàn cũ bị thu hồi; toàn bộ thiết bị chuyển hướng sang bàn mới sau 5 giây. |
-| Basic Flow | 1. Khách hàng (Chủ Bàn) bấm nút "Đổi bàn" trên giao diện gọi món.<br>2. Hệ thống gọi API xuất mã chuyển bàn (`TableTransferRequest`), sinh mã chuyển (VD: `TRF-8492`) có thời hạn sống TTL 5 phút, đồng thời đặt cờ `isOrderLocked = true` tại bàn cũ (giữ nguyên 100% giỏ hàng).<br>3. Khách hàng di chuyển sang bàn mới, mở modal chuyển bàn và nhập mã điều chuyển kèm mã PIN 4 số của bàn mới.<br>4. Hệ thống kiểm tra hợp lệ 2 chiều (Two-Way Handshake): xác thực mã chuyển hợp lệ, chưa hết hạn và đúng mã PIN bàn đích.<br>5. Hệ thống di dời toàn bộ `Order` và `OrderItem` sang bàn đích, hợp nhất giỏ hàng, cập nhật bàn cũ thành `CLEANING` và bàn mới thành `OCCUPIED`.<br>6. Server bắn WebSocket `/topic/table/{oldSessionToken}` kích hoạt modal đếm ngược 5 giây trên mọi thiết bị đang kết nối tại bàn cũ để tự động chuyển sang bàn mới.<br>7. Server bắn WebSocket `/topic/kitchen/orders` và `/topic/waiter/orders` cập nhật số bàn mới trên màn hình Bếp KDS và Phục vụ. |
-| Alternative Flow | 1a. Quản lý thực hiện chuyển trực tiếp 1-chạm từ màn hình sơ đồ bàn POS (`directTransfer`). Hệ thống thực hiện ngay bước 5–7 mà không cần sinh mã tạm. |
-| Exception Flow | 2a. Khách đổi ý không muốn chuyển: Nhấn "Hủy yêu cầu đổi bàn", hệ thống mở lại `isOrderLocked = false` tại bàn cũ.<br>3a. Mã chuyển bàn quá hạn 5 phút: Hệ thống tự động hủy mã và khôi phục trạng thái order bàn cũ.<br>4a. Nhập sai mã PIN bàn đích quá 5 lần: Khóa tạm thời 60 giây chống Brute-force. |
-| Business Rules | - BR33.1: Chỉ Chủ Bàn (Host) mới được tạo mã chuyển bàn.<br>- BR33.2: Cơ chế 2-Phase Lock bảo toàn 100% giỏ hàng đang chọn dở của khách.<br>- BR33.3: Bàn đích bắt buộc phải ở trạng thái Trống (`AVAILABLE`). |
-| Non-Functional Requirement | - NFR33.1: Toàn bộ quá trình di dời dữ liệu và đồng bộ WebSocket diễn ra dưới 1 giây. |
+| Use Case Name | Xác thực mật mã bàn (Table Passcode PIN) |
+| Description | Khách sau khi quét mã QR bàn phải nhập mã PIN 4 số bảo mật của bàn để được cấp quyền gọi món (tránh quét nhầm hoặc chụp lén QR gọi bậy). Quản lý có thể xem/đổi mã PIN. |
+| Actor(s) | Khách hàng, Manager, Admin |
+| Priority | Must have |
+| Trigger | Khách hàng quét mã QR mở trang bàn ăn (`TableEntryPage`). |
+| Pre-Condition(s) | Bàn ăn đang hoạt động hợp lệ. |
+| Post-Condition(s) | Cấp `deviceToken` và quyền truy cập thực đơn cho thiết bị nếu nhập đúng mã PIN. |
+| Basic Flow | 1. Màn hình hiển thị giao diện bàn phím số ảo nhập PIN 4 số.<br>2. Khách hàng nhìn mã PIN 4 số in trên tem để bàn và nhập vào.<br>3. Hệ thống gửi yêu cầu xác thực tới API `/api/v1/tables/{tableNumber}/verify-passcode`.<br>4. Nếu đúng: Cấp quyền, thiết bị đầu tiên được phong làm Chủ Bàn (`isHost = true`), chuyển thẳng vào thực đơn (UC02).<br>5. Quản lý có thể xem hoặc đổi mã PIN trực tiếp từ màn hình quản trị POS. |
+| Alternative Flow | Không có |
+| Exception Flow | 3a. Nhập sai mã PIN: Hệ thống đếm số lần sai. Nếu sai liên tiếp 5 lần, bàn bị tạm khóa xác thực trong 60 giây để chống tấn công dò mã (Brute-force). |
+| Business Rules | - BR33.1: Cơ chế chống dò mã PIN tự động kích hoạt sau 5 lần nhập sai liên tiếp. |
+| Non-Functional Requirement | - NFR33.1: Bàn phím số ảo tối ưu cảm ứng, phản hồi mượt mà không có độ trễ. |
 
-### 3.2.34 UC34: Ghép bàn & Cụm bàn liên kết (Table Merge & Cluster N:1)
+---
+
+### 3.2.34 UC34: Chuyển bàn / Ghép bàn từ phía Khách hàng
 
 | Thành phần | Nội dung |
 |---|---|
 | Use Case ID | UC34 |
-| Use Case Name | Ghép bàn & Cụm bàn liên kết (Table Merge & Cluster N:1) |
-| Description | Ghép một hoặc nhiều bàn phụ (Slave Tables) vào một bàn chính (Master Table) phục vụ đoàn tiệc đông người, gom chung order và hợp nhất hóa đơn thanh toán tập trung. |
-| Actor(s) | Khách hàng (Chủ Bàn), Quản lý / Thu ngân |
+| Use Case Name | Chuyển bàn / Ghép bàn từ phía Khách hàng |
+| Description | Chủ bàn tạo yêu cầu chuyển hoặc ghép bàn (mã xác nhận TTL 5 phút), sang bàn đích nhập mã để chuyển toàn bộ giỏ hàng và đơn đã gọi sang bàn mới. |
+| Actor(s) | Khách hàng |
 | Priority | High |
-| Trigger | Đoàn khách đi đông người ngồi rải rác nhiều bàn muốn gộp chung thành một nhóm thanh toán. |
-| Pre-Condition(s) | Cả bàn nguồn và bàn đích đều đang ở trạng thái `OCCUPIED`. Bàn nguồn không phải là bàn Master đang quản lý các bàn phụ khác. |
-| Post-Condition(s) | Bàn phụ được liên kết vào Bàn chính (`masterTable`); toàn bộ order của bàn phụ được chuyển về Bàn chính; giỏ hàng được hợp nhất; thanh toán tập trung tại Bàn chính. |
-| Basic Flow | 1. Khách tại bàn phụ (Chủ Bàn) hoặc Quản lý khởi tạo yêu cầu Ghép bàn (`transferType = MERGE`).<br>2. Nhập mã chuyển và mã PIN xác thực của Bàn chính (Master Table).<br>3. Server xác thực thành công, thiết lập quan hệ `masterTable` trỏ về Bàn chính.<br>4. Toàn bộ `Order` của bàn phụ được reparent về Bàn chính; các món trong giỏ hàng bàn phụ được dồn vào giỏ Bàn chính.<br>5. Server tự động tăng sức chứa thiết bị tối đa (`maxActiveDevices`) của cụm bàn tương ứng với tổng số khách.<br>6. Server bắn WebSocket `/topic/tables` cập nhật giao diện Cụm bàn (Master Table hiển thị nhãn Cụm kèm danh sách bàn phụ liên kết).<br>7. Khi kết thúc bữa tiệc, Thu ngân thanh toán hóa đơn tổng tại Bàn chính (UC15), hệ thống tự động chuyển Bàn chính và toàn bộ Bàn phụ sang trạng thái `CLEANING`. |
-| Alternative Flow | 1a. Quản lý liên kết nhanh nhiều bàn thành Cụm bàn trực tiếp từ giao diện POS (`TableClusterLinkRequest`). |
-| Exception Flow | 3a. Bàn phụ đang cố gắng ghép vòng lặp (ghép vào bàn đang là slave của chính mình): Hệ thống từ chối và báo lỗi nghiệp vụ.<br>4a. Bàn phụ tự ý gọi thanh toán riêng: Hệ thống tự động chuyển hướng yêu cầu thanh toán về Bàn chính. |
-| Business Rules | - BR34.1: Chỉ Bàn chính (Master Table) mới có quyền yêu cầu xuất hóa đơn và thanh toán.<br>- BR34.2: Thành viên cụm bàn không được phép chuyển bàn đơn lẻ khi chưa hủy liên kết cụm. |
-| Non-Functional Requirement | - NFR34.1: Sơ đồ bàn POS hiển thị trực quan các đường liên kết giữa Bàn chính và các Bàn phụ. |
+| Trigger | Chủ Bàn nhấn nút "Đổi bàn" hoặc "Ghép bàn" trên thanh điều hướng khách hàng. |
+| Pre-Condition(s) | Thiết bị đang là Chủ Bàn (`isHost = true`); bàn đang ở trạng thái `OCCUPIED`. |
+| Post-Condition(s) | Toàn bộ giỏ hàng và đơn đã gọi được chuyển sang bàn đích; bàn cũ chuyển trạng thái `CLEANING`. |
+| Basic Flow | 1. Chủ Bàn bấm nút "Đổi bàn".<br>2. Hệ thống sinh mã điều chuyển tạm thời (VD: `TRF-8492`) có thời hạn sống TTL 5 phút, tạm khóa order bàn cũ.<br>3. Khách di chuyển sang bàn mới, quét QR và nhập mã điều chuyển kèm mã PIN bàn mới.<br>4. Hệ thống kiểm tra hợp lệ 2 chiều: Chuyển toàn bộ Order và giỏ hàng sang bàn đích, cập nhật bàn cũ thành `CLEANING` và bàn mới thành `OCCUPIED`.<br>5. Bắn WebSocket đếm ngược 5 giây trên mọi thiết bị bàn cũ để tự động chuyển hướng sang bàn mới. |
+| Alternative Flow | Không có |
+| Exception Flow | 2a. Quá hạn 5 phút: Mã chuyển tự động hết hiệu lực, bàn cũ mở lại order bình thường. |
+| Business Rules | - BR34.1: Chỉ Chủ Bàn (Host) mới có quyền khởi tạo yêu cầu chuyển/ghép bàn. |
+| Non-Functional Requirement | - NFR34.1: Thời gian di dời dữ liệu và đồng bộ WebSocket dưới 1 giây. |
 
-### 3.2.35 UC35: Quản lý thiết bị & Phân quyền Chủ Bàn (Host / Member Session Management)
+---
+
+### 3.2.35 UC35: Chuyển bàn / Ghép bàn trực tiếp từ POS
 
 | Thành phần | Nội dung |
 |---|---|
 | Use Case ID | UC35 |
-| Use Case Name | Quản lý thiết bị & Phân quyền Chủ Bàn |
-| Description | Xác thực mã PIN 4 số chống Brute-force khi quét QR vào bàn, tự động phân quyền Chủ Bàn (Host) cho thiết bị đầu tiên, cho phép đá thiết bị lạ hoặc nhường quyền Chủ Bàn. |
-| Actor(s) | Khách hàng (tại bàn), Quản lý / Admin |
+| Use Case Name | Chuyển bàn / Ghép bàn trực tiếp từ POS |
+| Description | Nhân viên hoặc Quản lý thực hiện Chuyển bàn (Move) hoặc Ghép bàn (Merge) trực tiếp trên giao diện POS/Admin mà không cần khách thao tác mã chuyển. |
+| Actor(s) | Waiter, Manager, Admin |
 | Priority | High |
-| Trigger | Khách quét mã QR tại bàn để bắt đầu gọi món, hoặc Chủ Bàn cần quản lý các máy cùng bàn. |
-| Pre-Condition(s) | Khách đã quét mã QR mở URL `/table/:tableId`. Bàn đang hoạt động hợp lệ. |
-| Post-Condition(s) | Thiết bị được định danh bằng `deviceToken`; lưu phiên vào `TableSessionDevice`; gán quyền `isHost`; cấp quyền thao tác giỏ hàng và đặt món. |
-| Basic Flow | 1. Trình duyệt hiển thị trang nhập mã PIN 4 số an toàn (`TableEntryPage`).<br>2. Khách nhập mã PIN 4 số hiển thị trên bàn ăn.<br>3. Server gọi `verifyPasscode`: kiểm tra tính đúng đắn của mã PIN.<br>4. Nếu đúng: reset bộ đếm lỗi; kiểm tra số lượng thiết bị hiện tại của bàn. Nếu đây là thiết bị đầu tiên, gán `isHost = true`, các thiết bị sau gán `isHost = false`.<br>5. Client lưu `sessionToken`, `deviceToken`, `isHost` vào `useTableSessionStore` và chuyển hướng đến trang Thực đơn (`/menu`).<br>6. Chủ Bàn có thể mở modal `TableDevicesModal` để xem danh sách máy đang kết nối, bấm "Đá thiết bị" (`kickDevice`) hoặc "Nhường quyền Chủ Bàn" (`transferHost`).<br>7. Thiết bị bị đá lập tức nhận thông báo qua WebSocket, xóa sạch session và bị đẩy về màn hình thông báo rời bàn. |
-| Alternative Flow | 6a. Quản lý can thiệp trên giao diện POS: xem danh sách thiết bị của bàn (`AdminTableDevicesModal`), bấm cưỡng chế đá máy hoặc reset quyền Host. |
-| Exception Flow | 3a. Nhập sai mã PIN: Hệ thống tăng `failedAttempts`. Khi sai liên tiếp 5 lần, bàn bị khóa 60 giây (`lockedUntil = now + 60s`). API trả lỗi `TABLE_PASSCODE_LOCKED` kèm đồng hồ đếm ngược.<br>4a. Số thiết bị vượt quá `maxActiveDevices`: Server từ chối kết nối mới để chống spam/quá tải bàn. |
-| Business Rules | - BR35.1: Mỗi phiên bàn chỉ có duy nhất 1 Chủ Bàn (Host) tại một thời điểm.<br>- BR35.2: Chỉ Chủ Bàn mới có quyền bấm "Gửi đơn vào bếp", "Đổi bàn" và "Đá thiết bị". |
-| Non-Functional Requirement | - NFR35.1: Mã PIN 4 số được sinh ngẫu nhiên bằng bộ sinh số an toàn `SecureRandom`. |
+| Trigger | Nhân viên/Quản lý nhấn nút "Chuyển bàn" hoặc "Ghép bàn" trên sơ đồ bàn POS. |
+| Pre-Condition(s) | Đăng nhập tài khoản nhân sự có quyền điều phối bàn. |
+| Post-Condition(s) | Hệ thống thực hiện điều chuyển dữ liệu tức thì 1-chạm giữa 2 bàn mà khách không cần thao tác mã. |
+| Basic Flow | 1. Nhân viên chọn bàn nguồn cần chuyển trên sơ đồ POS.<br>2. Chọn hành động: "Chuyển bàn (Move)" hoặc "Ghép bàn (Merge)".<br>3. Chọn bàn đích từ danh sách bàn trống hoặc bàn đang có khách.<br>4. Nhấn "Xác nhận chuyển ngay".<br>5. Server cập nhật liên kết dữ liệu, bắn WebSocket cập nhật số bàn mới tới Bếp KDS và tự động chuyển hướng màn hình của khách hàng sang bàn mới. |
+| Alternative Flow | Không có |
+| Exception Flow | 3a. Chọn bàn đích không hợp lệ: Hệ thống cảnh báo và từ chối. |
+| Business Rules | - BR35.1: Thao tác trực tiếp từ POS giúp nhân viên hỗ trợ khách nhanh khi khách không rành công nghệ. |
+| Non-Functional Requirement | - NFR35.1: Đồng bộ tức thì 0ms tới tất cả các phân hệ. |
 
-### 3.2.36 UC36: Quản lý tài khoản nhân sự (Employee Management)
+---
+
+### 3.2.36 UC36: Quản lý Cụm Bàn Liên Kết (Master - Slave)
 
 | Thành phần | Nội dung |
 |---|---|
 | Use Case ID | UC36 |
-| Use Case Name | Quản lý tài khoản nhân sự |
-| Description | Quản trị viên (Admin) quản lý hồ sơ nhân viên trong hệ thống nhà hàng, phân quyền vai trò (ADMIN, MANAGER, KITCHEN, STAFF), kích hoạt/khóa tài khoản và gửi email thông tin đăng nhập. |
-| Actor(s) | Quản trị viên (Admin) |
+| Use Case Name | Quản lý Cụm Bàn Liên Kết (Master - Slave) |
+| Description | Hỗ trợ gộp nhiều bàn phụ (Slave) vào một bàn chính (Master) khi phục vụ các đoàn tiệc đông người; gom hóa đơn về bàn Master và có thể tách bàn phụ (unlink) ra khi cần. |
+| Actor(s) | Waiter, Manager, Admin |
 | Priority | High |
-| Trigger | Admin có nhu cầu thêm nhân viên mới, điều chỉnh chức vụ hoặc khóa tài khoản nhân sự nghỉ việc. |
-| Pre-Condition(s) | Admin đã đăng nhập với tài khoản có vai trò `ROLE_ADMIN`. |
-| Post-Condition(s) | Hồ sơ nhân viên được lưu vào cơ sở dữ liệu (`User`); email chào mừng chứa thông tin đăng nhập được gửi tự động tới nhân viên. |
-| Basic Flow | 1. Admin truy cập trang Quản lý nhân sự (`/admin/employees`).<br>2. Hệ thống hiển thị bảng thống kê nhân sự (`AdminEmployeeStats`) và danh sách nhân viên.<br>3. Admin có thể tìm kiếm theo tên/email/SĐT, hoặc lọc danh sách theo vai trò (`AdminEmployeeRoleRibbon`).<br>4. Nhấn "Thêm nhân viên", nhập thông tin: Họ tên, Tên đăng nhập, Email, Số điện thoại, Vai trò.<br>5. Hệ thống xác thực tính duy nhất của username và email, mã hóa mật khẩu bằng BCrypt, lưu tài khoản với trạng thái `ACTIVE`.<br>6. Hệ thống kích hoạt `MailService` gửi email bất đồng bộ thông báo tài khoản và mật khẩu khởi tạo cho nhân viên.<br>7. Admin có thể nhấn nút chuyển trạng thái để kích hoạt hoặc tạm khóa (`INACTIVE`) tài khoản nhân viên bất kỳ lúc nào. |
-| Alternative Flow | 4a. Admin nhấn nút "Sửa" trên dòng nhân viên để cập nhật thông tin họ tên, email, vai trò hoặc reset mật khẩu mới. |
-| Exception Flow | 5a. Trùng lặp username hoặc email: Hệ thống báo lỗi và yêu cầu chỉnh sửa.<br>7a. Admin cố tình khóa tài khoản của chính mình: Hệ thống ngăn chặn để tránh mất quyền quản trị hệ thống. |
-| Business Rules | - BR36.1: Chỉ tài khoản có vai trò ADMIN mới có quyền truy cập module này (`PermissionRoute adminOnly`).<br>- BR36.2: Mật khẩu luôn được băm bằng thuật toán BCrypt với độ muối (Salt) an toàn. |
-| Non-Functional Requirement | - NFR36.1: Email chào mừng gửi qua SMTP Google Mail hoàn tất trong vòng dưới 3 giây. |
+| Trigger | Đoàn khách đi tiệc đông người ngồi ghép nhiều bàn cạnh nhau. |
+| Pre-Condition(s) | Có ít nhất 2 bàn đang hoạt động trong cùng ca phục vụ. |
+| Post-Condition(s) | Thiết lập quan hệ Master - Slave giữa các bàn; gom toàn bộ đơn và hóa đơn về bàn Master; có thể tách bàn phụ khi cần. |
+| Basic Flow | 1. Quản lý/Phục vụ mở modal Cụm bàn trên POS.<br>2. Chọn một bàn làm Bàn chính (Master Table) và tích chọn các bàn phụ liên kết (Slave Tables).<br>3. Hệ thống thiết lập liên kết cụm: Mọi đợt order của các bàn phụ tự động gom về hóa đơn tổng của Bàn chính.<br>4. Sơ đồ bàn hiển thị huy hiệu Cụm bàn kết nối trực quan.<br>5. Khi một bàn phụ muốn thanh toán trước hoặc tách nhóm, quản lý có thể nhấn "Tách bàn phụ (Unlink)" để đưa bàn đó về trạng thái độc lập. |
+| Alternative Flow | Không có |
+| Exception Flow | Không có |
+| Business Rules | - BR36.1: Khi thanh toán bàn Master, toàn bộ cụm bàn tự động hoàn tất và chuyển sang trạng thái dọn dẹp. |
+| Non-Functional Requirement | - NFR36.1: Sơ đồ hiển thị đường nối trực quan giữa các bàn trong cùng cụm. |
 
-### 3.2.37 UC37: Quản lý hóa đơn & Đối soát doanh thu (Invoice Management)
+---
+
+### 3.2.37 UC37: Quản lý thiết bị kết nối vào bàn & Chuyển Host
 
 | Thành phần | Nội dung |
 |---|---|
 | Use Case ID | UC37 |
-| Use Case Name | Quản lý hóa đơn & Đối soát doanh thu |
-| Description | Quản lý tra cứu, tìm kiếm và đối soát toàn bộ lịch sử hóa đơn thanh toán của nhà hàng theo mốc thời gian, trạng thái và phương thức thanh toán. |
-| Actor(s) | Quản lý / Admin |
+| Use Case Name | Quản lý thiết bị kết nối vào bàn & Chuyển Host |
+| Description | Xem danh sách thiết bị đang kết nối vào bàn; Chủ bàn (Host) có thể chuyển quyền Host cho thiết bị khác hoặc kick thiết bị lạ; Quản lý cũng có quyền xem và kick thiết bị từ POS. |
+| Actor(s) | Khách hàng, Manager, Admin |
 | Priority | High |
-| Trigger | Quản lý cần kiểm tra doanh thu cuối ngày, đối soát tiền mặt hoặc tra cứu lại đơn hàng cũ của khách. |
-| Pre-Condition(s) | Người dùng đã đăng nhập với vai trò ADMIN hoặc MANAGER có quyền `INVOICES`. |
-| Post-Condition(s) | Danh sách hóa đơn được kết xuất chính xác; xem được chi tiết từng món ăn trong từng đợt order của hóa đơn. |
-| Basic Flow | 1. Quản lý truy cập trang Lịch sử hóa đơn (`/admin/invoices`).<br>2. Chọn bộ lọc: Khoảng thời gian (Từ ngày - Đến ngày), Trạng thái thanh toán (`PAID`, `PENDING`, `CANCELLED`), Phương thức (`CASH`, `VIETQR`), hoặc tìm theo mã hóa đơn/số bàn.<br>3. Hệ thống truy vấn cơ sở dữ liệu có phân trang (`Pageable`) và hiển thị danh sách hóa đơn tương ứng.<br>4. Quản lý nhấn vào một dòng hóa đơn để mở modal chi tiết (`InvoiceDetailModal`).<br>5. Màn hình hiển thị đầy đủ: Mã hóa đơn, Bàn ăn (hoặc Cụm bàn), Thời gian mở bàn và thanh toán, Danh sách từng đợt order kèm các món ăn, Tiền tạm tính, Chiết khấu khuyến mãi, Tiền thuế VAT và Tổng tiền thanh toán cuối cùng.<br>6. Quản lý có thể nhấn "In lại hóa đơn" ra máy in nhiệt khổ 80mm khi khách yêu cầu. |
-| Alternative Flow | Không có |
-| Exception Flow | 3a. Không tìm thấy hóa đơn nào khớp với bộ lọc: Hệ thống hiển thị trạng thái danh sách trống thân thiện. |
-| Business Rules | - BR37.1: Hóa đơn đã ở trạng thái `PAID` là dữ liệu bất biến (Immutable), không được phép chỉnh sửa số tiền.<br>- BR37.2: Doanh thu của Cụm bàn được tổng hợp đầy đủ từ tất cả các bàn phụ liên kết. |
-| Non-Functional Requirement | - NFR37.1: Thời gian truy vấn tìm kiếm hóa đơn có phân trang phải dưới 500ms đối với cơ sở dữ liệu hàng chục nghìn bản ghi. |
+| Trigger | Chủ Bàn hoặc Quản lý mở modal danh sách thiết bị bàn ăn. |
+| Pre-Condition(s) | Bàn đang có ít nhất 1 thiết bị kết nối. |
+| Post-Condition(s) | Thiết bị lạ bị ngắt kết nối (kick) hoặc quyền Host được chuyển giao sang thiết bị mới. |
+| Basic Flow | 1. Chủ Bàn bấm vào huy hiệu thiết bị trên thanh Header để mở modal `TableDevicesModal`.<br>2. Modal hiển thị danh sách các máy đang kết nối: Tên thiết bị, Thời gian kết nối, Huy hiệu Chủ Bàn.<br>3. Chủ Bàn có thể bấm nút "Nhượng quyền Chủ Bàn" cho một người bạn cùng bàn.<br>4. Hoặc bấm nút "Đá thiết bị" đối với các thiết bị lạ kết nối nhầm.<br>5. Máy bị đá ngay lập tức nhận thông báo qua WebSocket, bị xóa phiên và đẩy về trang đăng nhập bàn. |
+| Alternative Flow | 1a. Quản lý có thể mở modal thiết bị của bàn từ trang POS để cưỡng chế đá thiết bị hoặc gán lại quyền Host. |
+| Exception Flow | Không có |
+| Business Rules | - BR37.1: Mỗi phiên bàn luôn có duy nhất một thiết bị giữ vai trò Chủ Bàn (Host) tại một thời điểm. |
+| Non-Functional Requirement | - NFR37.1: Thiết bị bị đá nhận lệnh ngắt kết nối tức thì trong vòng dưới 200ms. |
 
-### 3.2.38 UC38: Tiếp nhận phục vụ & giao món tại sảnh (Waiter Service)
+---
+
+### 3.2.38 UC38: Màn hình Tiếp thực / Điều phối phục vụ bưng món
 
 | Thành phần | Nội dung |
 |---|---|
 | Use Case ID | UC38 |
-| Use Case Name | Tiếp nhận phục vụ & giao món tại sảnh |
-| Description | Nhân viên phục vụ theo dõi danh sách món ăn bếp đã chế biến xong cần bưng ra bàn, tiếp nhận chuông gọi phục vụ từ thực khách và xác nhận thu tiền mặt tại chỗ. |
-| Actor(s) | Nhân viên Phục vụ (Waiter) |
+| Use Case Name | Màn hình Tiếp thực / Điều phối phục vụ bưng món |
+| Description | Màn hình chuyên dụng cho nhân viên phục vụ, hiển thị danh sách các món ăn bếp đã làm xong (SERVED) cần bưng ra bàn, hỗ trợ xác nhận đã bưng món (DELIVERED) theo từng món hoặc cả đợt gọi. |
+| Actor(s) | Waiter, Manager |
 | Priority | High |
-| Trigger | Bếp hoàn tất nấu một món ăn, hoặc khách hàng bấm chuông gọi phục vụ tại bàn. |
-| Pre-Condition(s) | Nhân viên phục vụ đã đăng nhập vào hệ thống với quyền `WAITER`. |
-| Post-Condition(s) | Món ăn được giao tận bàn và cập nhật trạng thái `SERVED`; chuông gọi phục vụ được xử lý; bàn được dọn dẹp hoặc thu tiền mặt. |
-| Basic Flow | 1. Nhân viên phục vụ mở màn hình trạm phục vụ (`/waiter`).<br>2. Khi Bếp bấm hoàn tất chế biến món ăn, hệ thống bắn tin nhắn WebSocket tới `/topic/waiter/orders`.<br>3. Thẻ bàn `WaiterTableCard` trên màn hình phục vụ phát âm thanh thông báo và làm nổi bật món ăn cần bưng ra.<br>4. Nhân viên lấy món từ quầy bếp, mang đến bàn khách và nhấn "Xác nhận đã bưng món" (`deliverOrderItem`).<br>5. Khi khách hàng bấm chuông gọi phục vụ (UC07), thanh Header `WaiterHeader` hiển thị cảnh báo đỏ kèm nội dung yêu cầu (xin đá, chén dĩa). Nhân viên đến hỗ trợ và nhấn "Đã hỗ trợ xong" để đóng chuông.<br>6. Khi khách yêu cầu tính tiền mặt, nhân viên phục vụ có thể kiểm tra hóa đơn tạm tính và xác nhận đã thu tiền mặt trực tiếp tại bàn. |
-| Alternative Flow | 4a. Bàn có nhiều món xong cùng lúc: Nhân viên có thể nhấn "Bưng tất cả món" (`deliverAllOrderItems`) để cập nhật nhanh. |
-| Exception Flow | 2a. Khách đổi bàn trong lúc món đang nấu: Hệ thống tự động cập nhật số bàn mới trên thẻ `WaiterTableCard` để nhân viên không bưng nhầm sang bàn cũ. |
-| Business Rules | - BR38.1: Màn hình phục vụ được thiết kế giao diện nút bấm lớn, tương thích màn hình cảm ứng điện thoại/tablet di động.<br>- BR38.2: Âm thanh cảnh báo chuông gọi phục vụ có tần số và âm lượng rõ ràng trong không gian nhà hàng. |
-| Non-Functional Requirement | - NFR38.1: Thời gian từ khi bếp bấm xong món đến khi màn hình phục vụ nhận được tín hiệu là dưới 200ms. |
+| Trigger | Bếp hoàn tất nấu một món (UC18) hoặc nhân viên phục vụ mở màn hình `/waiter`. |
+| Pre-Condition(s) | Đã đăng nhập tài khoản vai trò Nhân viên phục vụ (`WAITER`). |
+| Post-Condition(s) | Món ăn được bưng tận bàn cho khách và cập nhật trạng thái `DELIVERED`. |
+| Basic Flow | 1. Nhân viên phục vụ theo dõi trạm phục vụ `/waiter`.<br>2. Khi bếp bấm xong món, thẻ bàn tương ứng phát chuông và hiển thị món ăn có nhãn xanh "Cần bưng ra bàn".<br>3. Nhân viên lấy món từ quầy tiếp thực mang ra bàn cho khách.<br>4. Bấm nút "Xác nhận đã bưng" (`DELIVERED`) cho từng món lẻ hoặc bấm "Bưng tất cả món".<br>5. Món ăn hoàn tất quy trình phục vụ và tự động cập nhật thanh tiến độ bên phía khách hàng. |
+| Alternative Flow | Không có |
+| Exception Flow | Không có |
+| Business Rules | - BR38.1: Thiết kế giao diện nút bấm lớn, phù hợp thao tác 1 tay trên điện thoại di động khi di chuyển trong nhà hàng. |
+| Non-Functional Requirement | - NFR38.1: Âm thanh báo món xong nổi bật, phản hồi dưới 200ms. |
+
+---
+
+### 3.2.39 UC39: Quản lý Tài khoản & Phân quyền Nhân viên
+
+| Thành phần | Nội dung |
+|---|---|
+| Use Case ID | UC39 |
+| Use Case Name | Quản lý Tài khoản & Phân quyền Nhân viên |
+| Description | Quản lý toàn bộ nhân viên nhà hàng: Thêm mới, cập nhật thông tin, kích hoạt/khóa tài khoản, cấp lại mật khẩu, phân vai trò (ADMIN, MANAGER, KITCHEN, WAITER, STAFF) và cấu hình chi tiết danh sách quyền hạn module. |
+| Actor(s) | Admin |
+| Priority | High |
+| Trigger | Quản trị viên truy cập trang Quản lý nhân viên `/admin/employees`. |
+| Pre-Condition(s) | Đăng nhập tài khoản Quản trị viên cấp cao nhất (`ROLE_ADMIN`). |
+| Post-Condition(s) | Tài khoản nhân viên được lưu, cập nhật trạng thái hoặc cấp lại mật khẩu; tự động gửi email chào mừng và mật khẩu qua SMTP Google Mail. |
+| Basic Flow | 1. Admin mở trang `/admin/employees`.<br>2. Xem danh sách nhân viên, lọc theo vai trò (Admin, Manager, Kitchen, Waiter, Staff).<br>3. Bấm "Thêm nhân viên mới", điền Họ tên, Tên đăng nhập, Email, Số điện thoại và Chọn vai trò.<br>4. Nhấn "Lưu nhân viên".<br>5. Hệ thống mã hóa mật khẩu khởi tạo bằng BCrypt, lưu vào cơ sở dữ liệu và kích hoạt `MailService` gửi email tự động tới hòm thư nhân viên.<br>6. Admin có thể bật/tắt công tắc để kích hoạt hoặc tạm khóa tài khoản nhân viên bất kỳ lúc nào. |
+| Alternative Flow | Không có |
+| Exception Flow | 3a. Trùng lặp username hoặc email: Hệ thống báo lỗi và yêu cầu chỉnh sửa.<br>6a. Admin tự khóa chính mình: Hệ thống ngăn chặn để tránh mất quyền quản trị. |
+| Business Rules | - BR39.1: Chỉ tài khoản có vai trò ADMIN mới có quyền truy cập module này. Mật khẩu luôn được băm bằng BCrypt. |
+| Non-Functional Requirement | - NFR39.1: Email thông báo tài khoản gửi đi thành công trong vòng dưới 3 giây. |
+
+---
+
+### 3.2.40 UC40: Tra cứu Lịch sử Hóa đơn & Phân tích chi tiết
+
+| Thành phần | Nội dung |
+|---|---|
+| Use Case ID | UC40 |
+| Use Case Name | Tra cứu Lịch sử Hóa đơn & Phân tích chi tiết |
+| Description | Tra cứu và lọc danh sách hóa đơn theo từ khóa, phương thức thanh toán (Tiền mặt / Chuyển khoản), trạng thái và khoảng ngày; xem chi tiết cơ cấu từng hóa đơn đã thanh toán. |
+| Actor(s) | Manager, Admin |
+| Priority | High |
+| Trigger | Quản lý truy cập mục "Lịch sử hóa đơn" `/admin/invoices`. |
+| Pre-Condition(s) | Tài khoản có quyền Quản lý hóa đơn (`INVOICE_VIEW`). |
+| Post-Condition(s) | Danh sách hóa đơn được kết xuất chính xác; xem được chi tiết từng món ăn trong từng đợt order và có thể in lại hóa đơn. |
+| Basic Flow | 1. Quản lý mở trang `/admin/invoices`.<br>2. Thiết lập bộ lọc: Khoảng ngày (Từ ngày - Đến ngày), Trạng thái (`PAID`, `CANCELLED`), Phương thức (`CASH`, `VIETQR`), hoặc tìm theo mã hóa đơn / số bàn.<br>3. Hệ thống truy vấn cơ sở dữ liệu có phân trang (`Pageable`) và hiển thị kết quả.<br>4. Nhấp vào một dòng hóa đơn để mở modal chi tiết `InvoiceDetailModal`.<br>5. Xem toàn bộ cơ cấu hóa đơn: Mã đơn, Bàn ăn, Thời gian phục vụ, Danh sách món ăn chi tiết, Thuế VAT, Chiết khấu và Tổng tiền.<br>6. Quản lý có thể bấm nút "In lại hóa đơn" ra khổ nhiệt 80mm khi cần thiết. |
+| Alternative Flow | Không có |
+| Exception Flow | Không có |
+| Business Rules | - BR40.1: Hóa đơn đã thanh toán là dữ liệu bất biến, chỉ được phép tra cứu và in lại, không được chỉnh sửa số tiền. |
+| Non-Functional Requirement | - NFR40.1: Tốc độ truy vấn tìm kiếm hóa đơn dưới 500ms cho tập dữ liệu lớn. |
+
+---
+
+### 3.2.41 UC41: Tải ảnh món ăn lên Cloudinary CDN
+
+| Thành phần | Nội dung |
+|---|---|
+| Use Case ID | UC41 |
+| Use Case Name | Tải ảnh món ăn lên Cloudinary CDN |
+| Description | Hỗ trợ chọn tệp ảnh trực tiếp từ máy tính khi tạo/sửa món ăn, tải lên Cloudinary CDN và gắn URL ảnh tự động vào thực đơn. |
+| Actor(s) | Manager, Admin |
+| Priority | High |
+| Trigger | Quản lý chọn tệp ảnh từ máy tính trong modal Thêm/Sửa món ăn (UC24). |
+| Pre-Condition(s) | Đang mở modal `MenuItemModal`. Dịch vụ lưu trữ Cloudinary hoạt động ổn định. |
+| Post-Condition(s) | Ảnh được tải lên đám mây Cloudinary; lấy về đường dẫn trực tiếp (Secure CDN URL) và lưu vào trường `image` của món ăn. |
+| Basic Flow | 1. Tại khung tải ảnh của modal món ăn, Quản lý bấm "Chọn ảnh từ máy tính" hoặc kéo thả tệp ảnh.<br>2. Trình duyệt kiểm tra định dạng hợp lệ (JPG, PNG, WEBP, GIF) và dung lượng tối đa 10MB.<br>3. Hiển thị khung xem trước (Preview) ảnh món ăn.<br>4. Khi quản lý bấm "Lưu Món Ăn", hàm `uploadImageToCDN` tự động tải ảnh lên máy chủ Cloudinary CDN.<br>5. Lấy đường link URL CDN an toàn gán vào thuộc tính món ăn và lưu vào Database. |
+| Alternative Flow | Không có |
+| Exception Flow | 2a. Tệp vượt quá 10MB: Hệ thống báo lỗi *"Kích thước ảnh tối đa là 10MB"*. |
+| Business Rules | - BR41.1: Ảnh chỉ được upload lên CDN khi người dùng bấm Lưu, tránh lãng phí dung lượng khi hủy form. |
+| Non-Functional Requirement | - NFR41.1: Ảnh tải lên Cloudinary được tự động nén tối ưu hiển thị nhanh trên web. |
+
+---
+
+### 3.2.42 UC42: In hàng loạt Thẻ mã QR Bàn ăn
+
+| Thành phần | Nội dung |
+|---|---|
+| Use Case ID | UC42 |
+| Use Case Name | In hàng loạt Thẻ mã QR Bàn ăn |
+| Description | Trang quản lý hiển thị danh sách thẻ bàn kèm QR Code và mã Passcode, hỗ trợ in ấn hàng loạt thẻ để dán lên từng bàn ăn. |
+| Actor(s) | Manager, Admin |
+| Priority | High |
+| Trigger | Quản lý bấm nút "In hàng loạt Thẻ QR" trên trang Quản lý bàn ăn `/admin/tables-qr`. |
+| Pre-Condition(s) | Hệ thống đã có danh sách bàn ăn với mã QR và mã PIN hợp lệ. |
+| Post-Condition(s) | Bố cục trang in tem thẻ bàn chuẩn khổ giấy A4/A5 hiển thị trực quan sẵn sàng kết nối máy in văn phòng. |
+| Basic Flow | 1. Quản lý truy cập trang In thẻ bàn `/admin/tables-qr`.<br>2. Chọn khu vực cần in (Tất cả, Tầng trệt, Tầng 1, VIP) hoặc chọn các bàn cụ thể.<br>3. Giao diện hiển thị danh sách tem thẻ bàn thiết kế thẩm mỹ: Logo nhà hàng Hỏa Diễm Các, Tên số hiệu bàn lớn, Mã QR Code sắc nét và Mã Passcode PIN 4 số bảo mật.<br>4. Quản lý bấm nút "In danh sách thẻ bàn".<br>5. Trình duyệt mở hộp thoại in chuẩn CSS `@media print`, tự động ngắt trang đẹp mắt để cắt dán lên từng bàn ăn. |
+| Alternative Flow | Không có |
+| Exception Flow | Không có |
+| Business Rules | - BR42.1: Mã QR in trên tem thẻ phải có độ phân giải cao để camera điện thoại dễ dàng quét được dưới ánh đèn nhà hàng. |
+| Non-Functional Requirement | - NFR42.1: Bố cục in thẻ bàn chuẩn xác, canh lề đều đặn và không bị tràn trang. |

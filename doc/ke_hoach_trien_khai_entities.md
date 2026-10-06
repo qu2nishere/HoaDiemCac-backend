@@ -106,7 +106,7 @@ erDiagram
 ---
 
 ### 3.4. `TableTransfer` (Bảng `table_transfers`)
-- **Mục đích:** Quản lý giao dịch Chuyển bàn (1:1) hoặc Ghép bàn (N:1) áp dụng cơ chế Khóa tạm thời 2 giai đoạn (2-Phase Lock với TTL 5 phút) để bảo toàn giỏ hàng (UC33, UC34).
+- **Mục đích:** Quản lý giao dịch Chuyển bàn (1:1) hoặc Ghép bàn (N:1) áp dụng cơ chế Khóa tạm thời 2 giai đoạn (2-Phase Lock với TTL 5 phút) để bảo toàn giỏ hàng (UC34, UC35, UC36).
 - **Các chỉ mục:** `idx_transfer_code` (Unique), `idx_transfer_status_expires`, `idx_transfer_source_table`.
 - **Chi tiết các trường:**
   - `transferCode` (VARCHAR(20), Unique, Not Null): Mã điều chuyển (VD: "TRF-8492").
