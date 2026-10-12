@@ -359,8 +359,22 @@ INSERT INTO `menu_item_categories` (`menu_item_id`, `category_id`)
 SELECT mi.id, cat.id FROM `menu_items` mi, `categories` cat
 WHERE mi.code IN ('M52', 'M53', 'M54', 'M55') AND cat.slug = 'trang-mieng';
 
+-- -----------------------------------------------------------------------------
+-- 3. SEED DANH SÁCH BÀN ĂN BAN ĐẦU (RESTAURANT TABLES)
+-- -----------------------------------------------------------------------------
+INSERT INTO `restaurant_tables` (`table_number`, `name`, `area`, `capacity`, `status`, `is_order_locked`, `failed_attempts`, `max_active_devices`, `active_device_count`, `created_at`, `updated_at`)
+VALUES
+('B01', 'Bàn 01 (Sảnh)', 'COMMON', 4, 'AVAILABLE', 0, 0, 6, 0, NOW(), NOW()),
+('B02', 'Bàn 02 (Sảnh)', 'COMMON', 4, 'AVAILABLE', 0, 0, 6, 0, NOW(), NOW()),
+('B03', 'Bàn 03 (Sảnh)', 'COMMON', 6, 'AVAILABLE', 0, 0, 9, 0, NOW(), NOW()),
+('B04', 'Bàn 04 (Sảnh)', 'COMMON', 6, 'AVAILABLE', 0, 0, 9, 0, NOW(), NOW()),
+('B05', 'Bàn 05 (Sảnh)', 'COMMON', 8, 'AVAILABLE', 0, 0, 12, 0, NOW(), NOW()),
+('VIP01', 'Phòng VIP Hoàng Triều', 'VIP', 10, 'AVAILABLE', 0, 0, 15, 0, NOW(), NOW()),
+('VIP02', 'Phòng VIP Cung Đình', 'VIP', 12, 'AVAILABLE', 0, 0, 18, 0, NOW(), NOW())
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================================================
--- HOÀN TẤT SEED DỮ LIỆU THỰC ĐƠN LẨU TRUNG HOA CHO HỎA DIỆM CÁC!
+-- HOÀN TẤT SEED DỮ LIỆU THỰC ĐƠN VÀ BÀN ĂN CHO HỎA DIỆM CÁC!
 -- =============================================================================
