@@ -88,12 +88,13 @@ public class TableQrServiceImpl implements TableQrService {
     @Override
     @Transactional
     public TableQrResponse createTable(TableCreateUpdateRequest request) {
-        if (tableRepository.existsByTableNumber(request.getTableNumber().toUpperCase())) {
-            throw new AppException(ErrorCode.INVALID_REQUEST);
+        String upperTableNumber = request.getTableNumber().toUpperCase().trim();
+        if (tableRepository.existsByTableNumber(upperTableNumber)) {
+            throw new AppException(ErrorCode.RESOURCE_ALREADY_EXISTS, "Mã bàn " + upperTableNumber + " đã tồn tại trên hệ thống");
         }
 
         RestaurantTable table = RestaurantTable.builder()
-                .tableNumber(request.getTableNumber().toUpperCase().trim())
+                .tableNumber(upperTableNumber)
                 .name(request.getName().trim())
                 .area(request.getArea())
                 .capacity(request.getCapacity())
@@ -107,6 +108,7 @@ public class TableQrServiceImpl implements TableQrService {
         table.generateNewPasscode();
         table.setCurrentSessionToken(UUID.randomUUID().toString());
         RestaurantTable saved = tableRepository.save(table);
+        broadcastTableUpdate(saved);
         return mapToResponse(saved);
     }
 

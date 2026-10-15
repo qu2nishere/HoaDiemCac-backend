@@ -1,6 +1,8 @@
 package com.hoadiemcat.service;
 
+import com.hoadiemcat.dto.request.TableCreateUpdateRequest;
 import com.hoadiemcat.dto.request.VerifyPasscodeRequest;
+import com.hoadiemcat.dto.response.TableQrResponse;
 import com.hoadiemcat.dto.response.VerifyPasscodeResponse;
 import com.hoadiemcat.entity.RestaurantTable;
 import com.hoadiemcat.entity.enums.TableArea;
@@ -336,5 +338,55 @@ class TableQrServiceTest {
         verify(orderItemRepository, times(1)).deleteAll(any());
         verify(orderRepository, times(1)).deleteAll(any());
         verify(cartRepository, times(1)).deleteByRestaurantTable(mockTable);
+    }
+
+    @Test
+    @DisplayName("Tạo bàn ăn mới thành công và broadcast qua WebSocket")
+    void testCreateTableSuccess() {
+        TableCreateUpdateRequest request = TableCreateUpdateRequest.builder()
+                .tableNumber("B15")
+                .name("Bàn 15 – Sảnh Hoa Đăng")
+                .area(TableArea.COMMON)
+                .capacity(4)
+                .maxActiveDevices(6)
+                .build();
+
+        when(tableRepository.existsByTableNumber("B15")).thenReturn(false);
+        when(tableRepository.save(any(RestaurantTable.class))).thenAnswer(invocation -> {
+            RestaurantTable t = invocation.getArgument(0);
+            t.setId(15L);
+            return t;
+        });
+
+        TableQrResponse response = tableQrService.createTable(request);
+
+        assertNotNull(response);
+        assertEquals("B15", response.getTableNumber());
+        assertEquals("Bàn 15 – Sảnh Hoa Đăng", response.getName());
+        assertEquals(TableArea.COMMON, response.getArea());
+        assertEquals(4, response.getCapacity());
+        assertEquals(6, response.getMaxActiveDevices());
+        assertNotNull(response.getCurrentPasscode());
+        assertNotNull(response.getCurrentSessionToken());
+        verify(tableRepository, times(1)).save(any(RestaurantTable.class));
+        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/tables"), any(TableQrResponse.class));
+    }
+
+    @Test
+    @DisplayName("Tạo bàn ăn mới ném lỗi RESOURCE_ALREADY_EXISTS khi mã bàn đã tồn tại")
+    void testCreateTableDuplicateNumberThrowsException() {
+        TableCreateUpdateRequest request = TableCreateUpdateRequest.builder()
+                .tableNumber("B01")
+                .name("Bàn 01")
+                .area(TableArea.COMMON)
+                .capacity(4)
+                .build();
+
+        when(tableRepository.existsByTableNumber("B01")).thenReturn(true);
+
+        AppException ex = assertThrows(AppException.class, () -> tableQrService.createTable(request));
+        assertEquals(ErrorCode.RESOURCE_ALREADY_EXISTS, ex.getErrorCode());
+        assertTrue(ex.getMessage().contains("B01"));
+        verify(tableRepository, never()).save(any());
     }
 }
