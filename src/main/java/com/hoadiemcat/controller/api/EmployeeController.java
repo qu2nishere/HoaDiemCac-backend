@@ -67,6 +67,9 @@ public class EmployeeController {
         if (newPassword == null || newPassword.isBlank()) {
             throw new IllegalArgumentException("Mật khẩu mới không được để trống");
         }
+        if (newPassword.trim().length() < 8) {
+            throw new IllegalArgumentException("Mật khẩu không đủ mạnh: Mật khẩu phải từ 8 ký tự trở lên");
+        }
         employeeService.resetPassword(id, newPassword);
         return ResponseEntity.ok(ApiResponse.success("Cấp lại mật khẩu mới thành công", null));
     }

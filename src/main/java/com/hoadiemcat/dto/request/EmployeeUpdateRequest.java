@@ -29,6 +29,7 @@ public class EmployeeUpdateRequest {
 
     private String role;
 
+    @jakarta.validation.constraints.Pattern(regexp = "^$|^.{8,}$", message = "Mật khẩu phải từ 8 ký tự trở lên")
     private String password;
 
     private List<String> permissions;

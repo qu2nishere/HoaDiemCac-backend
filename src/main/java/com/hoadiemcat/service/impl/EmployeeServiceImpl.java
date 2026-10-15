@@ -100,6 +100,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            if (request.getPassword().trim().length() < 8) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Mật khẩu không đủ mạnh: Mật khẩu phải từ 8 ký tự trở lên");
+            }
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
 
@@ -138,6 +141,9 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional
     public void resetPassword(Long id, String newPassword) {
+        if (newPassword == null || newPassword.trim().length() < 8) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Mật khẩu không đủ mạnh: Mật khẩu phải từ 8 ký tự trở lên");
+        }
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhân viên"));
 

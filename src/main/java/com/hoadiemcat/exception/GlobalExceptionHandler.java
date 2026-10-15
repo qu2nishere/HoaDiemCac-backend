@@ -38,12 +38,41 @@ public class GlobalExceptionHandler {
             errors.put(fieldName, errorMessage);
         });
 
+        String message = "Dữ liệu không hợp lệ";
+        if (errors.containsKey("password")) {
+            String pwdErr = errors.get("password");
+            if (pwdErr != null && pwdErr.toLowerCase().contains("trống")) {
+                message = pwdErr;
+            } else {
+                message = "Mật khẩu không đủ mạnh" + (pwdErr != null && !pwdErr.isBlank() ? ": " + pwdErr : ".");
+            }
+        } else if (errors.containsKey("newPassword")) {
+            String pwdErr = errors.get("newPassword");
+            if (pwdErr != null && pwdErr.toLowerCase().contains("trống")) {
+                message = pwdErr;
+            } else {
+                message = "Mật khẩu không đủ mạnh" + (pwdErr != null && !pwdErr.isBlank() ? ": " + pwdErr : ".");
+            }
+        } else if (!errors.isEmpty()) {
+            message = errors.values().iterator().next();
+        }
+
         ApiResponse<Map<String, String>> apiResponse = ApiResponse.<Map<String, String>>builder()
                 .code(ErrorCode.INVALID_REQUEST.getCode())
-                .message("Validation failed")
+                .message(message)
                 .result(errors)
                 .build();
 
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(apiResponse);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalArgumentException(IllegalArgumentException exception) {
+        log.warn("Invalid argument: {}", exception.getMessage());
+        ApiResponse<Object> apiResponse = ApiResponse.builder()
+                .code(ErrorCode.INVALID_REQUEST.getCode())
+                .message(exception.getMessage())
+                .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(apiResponse);
     }
 
