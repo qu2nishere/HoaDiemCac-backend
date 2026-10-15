@@ -118,7 +118,11 @@ public class EmployeeServiceImpl implements EmployeeService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhân viên"));
 
-        user.setStatus(user.getStatus() == Status.ACTIVE ? Status.INACTIVE : Status.ACTIVE);
+        Status nextStatus = user.getStatus() == Status.ACTIVE ? Status.INACTIVE : Status.ACTIVE;
+        user.setStatus(nextStatus);
+        if (nextStatus == Status.ACTIVE) {
+            user.setFailedLoginAttempts(0);
+        }
         userRepository.save(user);
     }
 
@@ -138,6 +142,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhân viên"));
 
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setFailedLoginAttempts(0);
         userRepository.save(user);
     }
 

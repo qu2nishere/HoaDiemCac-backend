@@ -50,9 +50,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponse<Object>> handleAuthenticationException(AuthenticationException exception) {
         log.warn("Authentication failed: {}", exception.getMessage());
+        String message = exception.getMessage();
+        if (message == null || message.isBlank() || "Bad credentials".equalsIgnoreCase(message)) {
+            message = "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại!";
+        }
         ApiResponse<Object> apiResponse = ApiResponse.builder()
                 .code(ErrorCode.UNAUTHENTICATED.getCode())
-                .message("Authentication failed: " + exception.getMessage())
+                .message(message)
                 .build();
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(apiResponse);
     }
