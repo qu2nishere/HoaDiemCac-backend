@@ -12,6 +12,7 @@ import com.hoadiemcat.entity.enums.OrderItemStatus;
 import com.hoadiemcat.entity.enums.OrderStatus;
 import com.hoadiemcat.entity.enums.TableStatus;
 import com.hoadiemcat.exception.ResourceNotFoundException;
+import com.hoadiemcat.repository.CartRepository;
 import com.hoadiemcat.repository.MenuItemRepository;
 import com.hoadiemcat.repository.OrderItemRepository;
 import com.hoadiemcat.repository.OrderRepository;
@@ -41,6 +42,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository orderItemRepository;
     private final RestaurantTableRepository restaurantTableRepository;
     private final MenuItemRepository menuItemRepository;
+    private final CartRepository cartRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     private String normalizeTableNumber(String rawTable) {
@@ -163,6 +165,25 @@ public class OrderServiceImpl implements OrderService {
             }
         } catch (Exception e) {
             log.warn("Lỗi khi bắn WebSocket order: {}", e.getMessage());
+        }
+
+        // Làm rỗng giỏ hàng nháp chung của bàn sau khi đã gửi bếp thành công (UC05)
+        try {
+            if (cartRepository != null) {
+                cartRepository.findByRestaurantTable(table).ifPresent(cartRepository::delete);
+            }
+            java.util.List<?> emptyCart = java.util.Collections.emptyList();
+            if (table.getTableNumber() != null) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/cart", emptyCart);
+            }
+            if (table.getName() != null && !table.getName().equals(table.getTableNumber())) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getName() + "/cart", emptyCart);
+            }
+            if (table.getCurrentSessionToken() != null) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getCurrentSessionToken() + "/cart", emptyCart);
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi khi làm rỗng giỏ hàng sau khi gửi order: {}", e.getMessage());
         }
 
         return response;
