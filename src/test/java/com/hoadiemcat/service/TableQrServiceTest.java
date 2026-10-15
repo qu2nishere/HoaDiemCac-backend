@@ -389,4 +389,58 @@ class TableQrServiceTest {
         assertTrue(ex.getMessage().contains("B01"));
         verify(tableRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("Sinh PIN mới cho bàn đang OCCUPIED phải bảo toàn trạng thái bàn, danh sách món và tổng hóa đơn")
+    void testRegeneratePasscodePreservesOccupiedStatusAndOrders() {
+        mockTable.setStatus(TableStatus.OCCUPIED);
+        mockTable.setCurrentPasscode("1111");
+        mockTable.setCurrentSessionToken("old-session-token");
+        LocalDateTime startedAt = LocalDateTime.now().minusMinutes(10);
+        mockTable.setSessionStartedAt(startedAt);
+
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(mockTable));
+        when(tableRepository.save(any(RestaurantTable.class))).thenReturn(mockTable);
+
+        // Giả lập đơn hàng của bàn với tổng hóa đơn 1.554.000 ₫
+        com.hoadiemcat.entity.Order mockOrder = com.hoadiemcat.entity.Order.builder()
+                .restaurantTable(mockTable)
+                .sessionToken("old-session-token")
+                .roundNumber(1)
+                .status(com.hoadiemcat.entity.enums.OrderStatus.COMPLETED)
+                .build();
+        mockOrder.setId(1L);
+
+        com.hoadiemcat.entity.OrderItem item = com.hoadiemcat.entity.OrderItem.builder()
+                .order(mockOrder)
+                .price(new java.math.BigDecimal("1554000"))
+                .quantity(1)
+                .totalPrice(new java.math.BigDecimal("1554000"))
+                .build();
+        mockOrder.addOrderItem(item);
+
+        when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(mockTable)).thenReturn(List.of(mockOrder));
+
+        TableQrResponse res = tableQrService.regeneratePasscode(1L);
+
+        // Xác nhận PIN và Token mới đã sinh
+        assertNotNull(res);
+        assertNotNull(res.getCurrentPasscode());
+        assertNotEquals("1111", res.getCurrentPasscode());
+        assertNotNull(res.getCurrentSessionToken());
+        assertNotEquals("old-session-token", res.getCurrentSessionToken());
+
+        // Xác nhận trạng thái bàn và các thông tin đơn hàng được bảo toàn tuyệt đối
+        assertEquals(TableStatus.OCCUPIED, res.getStatus(), "Trạng thái bàn phải được giữ nguyên là OCCUPIED");
+        assertEquals(new java.math.BigDecimal("1554000"), res.getTotalAmount(), "Tổng hóa đơn phải được bảo toàn nguyên vẹn");
+        assertEquals(1, res.getActiveOrderCount(), "Số đợt order phải được bảo toàn");
+
+        // Đảm bảo TUYỆT ĐỐI KHÔNG gọi hàm xóa order hoặc order_items
+        verify(orderRepository, never()).deleteAll(any());
+        verify(orderItemRepository, never()).deleteAll(any());
+        verify(cartRepository, never()).deleteByRestaurantTable(any());
+
+        // Xác nhận broadcast qua WebSocket
+        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/tables"), any(TableQrResponse.class));
+    }
 }

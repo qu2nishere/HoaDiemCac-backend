@@ -137,7 +137,29 @@ public class TableQrServiceImpl implements TableQrService {
     @Transactional
     public TableQrResponse regeneratePasscode(Long id) {
         RestaurantTable table = findTableEntity(id);
-        resetTableToAvailableSession(table);
+
+        // Sinh mã PIN 4 số ngẫu nhiên mới và cấp Dynamic Session Token mới theo UC11 và UC28
+        table.generateNewPasscode();
+        table.setCurrentSessionToken(UUID.randomUUID().toString());
+
+        // Vô hiệu hóa toàn bộ thiết bị cũ kết nối vào bàn để ngắt kết nối bên ngoài
+        List<TableSessionDevice> oldDevices = tableSessionDeviceRepository.findByTable(table);
+        if (oldDevices != null && !oldDevices.isEmpty()) {
+            for (TableSessionDevice d : oldDevices) {
+                d.setIsActive(false);
+            }
+            tableSessionDeviceRepository.saveAll(oldDevices);
+        }
+        table.setActiveDeviceCount(0);
+        table.resetFailedAttempts();
+
+        // BẢO TOÀN NGUYÊN VẸN TÌNH TRẠNG HOẠT ĐỘNG, ĐƠN HÀNG VÀ TỔNG HÓA ĐƠN CỦA BÀN:
+        // - Giữ nguyên trạng thái bàn (VD: OCCUPIED - Đang phục vụ)
+        // - Giữ nguyên danh sách các món ăn đã gọi trong bảng order_items
+        // - Giữ nguyên toàn bộ các đợt gọi món và tổng hóa đơn trong bảng orders
+        // - Giữ nguyên thời gian bắt đầu phiên sessionStartedAt
+        // TUYỆT ĐỐI KHÔNG gọi resetTableToAvailableSession(table) hay cleanTableOrdersAndLogs(table) ở đây!
+
         RestaurantTable saved = tableRepository.save(table);
         broadcastTableUpdate(saved);
         return mapToResponse(saved);
