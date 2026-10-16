@@ -74,13 +74,23 @@ public class CartServiceImpl implements CartService {
         }
 
         RestaurantTable finalTable = table;
-        Cart cart = cartRepository.findByRestaurantTable(table)
-                .orElseGet(() -> Cart.builder()
-                        .restaurantTable(finalTable)
-                        .sessionToken(finalTable.getCurrentSessionToken() != null ? finalTable.getCurrentSessionToken() : "SESSION_" + finalTable.getTableNumber())
-                        .items(new ArrayList<>())
-                        .build()
-                );
+        List<Cart> existingCarts = cartRepository.findAllByRestaurantTable(table);
+        Cart cart;
+        if (existingCarts.isEmpty()) {
+            cart = Cart.builder()
+                    .restaurantTable(finalTable)
+                    .sessionToken(finalTable.getCurrentSessionToken() != null ? finalTable.getCurrentSessionToken() : "SESSION_" + finalTable.getTableNumber())
+                    .items(new ArrayList<>())
+                    .build();
+        } else {
+            cart = existingCarts.get(0);
+            if (existingCarts.size() > 1) {
+                // Tự động dọn dẹp các bản ghi dư thừa do xung đột gửi đồng thời
+                for (int i = 1; i < existingCarts.size(); i++) {
+                    cartRepository.delete(existingCarts.get(i));
+                }
+            }
+        }
 
         if (cart.getItems() == null) {
             cart.setItems(new ArrayList<>());
@@ -124,7 +134,10 @@ public class CartServiceImpl implements CartService {
         if (table.isLinked()) {
             table = table.getEffectiveTable();
         }
-        cartRepository.findByRestaurantTable(table).ifPresent(cartRepository::delete);
+        List<Cart> carts = cartRepository.findAllByRestaurantTable(table);
+        if (!carts.isEmpty()) {
+            cartRepository.deleteAll(carts);
+        }
         broadcastCart(table, Collections.emptyList(), null);
     }
 
@@ -152,7 +165,7 @@ public class CartServiceImpl implements CartService {
 
     private List<DraftCartItemResponse> getDraftCartItemResponses(RestaurantTable table) {
         List<DraftCartItemResponse> result = new ArrayList<>();
-        Optional<Cart> cartOpt = cartRepository.findByRestaurantTable(table);
+        Optional<Cart> cartOpt = cartRepository.findFirstByRestaurantTableOrderByIdDesc(table);
         if (cartOpt.isPresent()) {
             Cart cart = cartOpt.get();
             if (cart.getItems() != null) {

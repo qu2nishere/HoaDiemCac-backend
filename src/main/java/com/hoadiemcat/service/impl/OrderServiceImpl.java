@@ -4,6 +4,7 @@ import com.hoadiemcat.dto.request.CreateOrderRequest;
 import com.hoadiemcat.dto.request.OrderItemRequest;
 import com.hoadiemcat.dto.response.OrderItemResponse;
 import com.hoadiemcat.dto.response.OrderResponse;
+import com.hoadiemcat.entity.Cart;
 import com.hoadiemcat.entity.MenuItem;
 import com.hoadiemcat.entity.Order;
 import com.hoadiemcat.entity.OrderItem;
@@ -104,6 +105,16 @@ public class OrderServiceImpl implements OrderService {
             sessionToken = table.getCurrentSessionToken() != null ? table.getCurrentSessionToken() : "SESSION_" + table.getTableNumber();
         }
 
+        // Chuyển trạng thái bàn sang OCCUPIED và gắn sessionToken nếu bàn chưa phục vụ
+        if (table.getStatus() != TableStatus.OCCUPIED || table.getCurrentSessionToken() == null) {
+            table.setStatus(TableStatus.OCCUPIED);
+            table.setCurrentSessionToken(sessionToken);
+            if (table.getSessionStartedAt() == null) {
+                table.setSessionStartedAt(java.time.LocalDateTime.now());
+            }
+            restaurantTableRepository.save(table);
+        }
+
         // Tính round number
         List<Order> existingOrders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(table);
         int roundNumber = existingOrders.size() + 1;
@@ -170,7 +181,10 @@ public class OrderServiceImpl implements OrderService {
         // Làm rỗng giỏ hàng nháp chung của bàn sau khi đã gửi bếp thành công (UC05)
         try {
             if (cartRepository != null) {
-                cartRepository.findByRestaurantTable(table).ifPresent(cartRepository::delete);
+                List<Cart> carts = cartRepository.findAllByRestaurantTable(table);
+                if (!carts.isEmpty()) {
+                    cartRepository.deleteAll(carts);
+                }
             }
             java.util.List<?> emptyCart = java.util.Collections.emptyList();
             if (table.getTableNumber() != null) {
@@ -197,16 +211,20 @@ public class OrderServiceImpl implements OrderService {
                 .or(() -> restaurantTableRepository.findByName(normalized))
                 .orElse(null);
 
-        if (table != null && table.getCurrentSessionToken() != null && table.getStatus() == TableStatus.OCCUPIED) {
-            return orderRepository.findByTableNumberAndSessionTokenOrderByCreatedAtAsc(normalized, table.getCurrentSessionToken())
+        if (table != null && table.getCurrentSessionToken() != null) {
+            List<OrderResponse> sessionOrders = orderRepository.findByTableNumberAndSessionTokenOrderByCreatedAtAsc(normalized, table.getCurrentSessionToken())
                     .stream()
+                    .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
                     .map(this::mapToResponse)
                     .collect(Collectors.toList());
+            if (!sessionOrders.isEmpty()) {
+                return sessionOrders;
+            }
         }
 
         return orderRepository.findByTableNumberOrderByCreatedAtAsc(normalized)
                 .stream()
-                .filter(o -> o.getStatus() != OrderStatus.COMPLETED && o.getStatus() != OrderStatus.CANCELLED)
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
