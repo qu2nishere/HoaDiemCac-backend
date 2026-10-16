@@ -3,6 +3,7 @@ package com.hoadiemcat.controller.api;
 import com.hoadiemcat.dto.response.ApiResponse;
 import com.hoadiemcat.dto.response.OrderItemResponse;
 import com.hoadiemcat.dto.response.OrderResponse;
+import com.hoadiemcat.entity.enums.OrderItemStatus;
 import com.hoadiemcat.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,6 +33,13 @@ public class WaiterController {
     public ResponseEntity<ApiResponse<OrderItemResponse>> deliverOrderItem(@PathVariable Long orderItemId) {
         OrderItemResponse response = orderService.deliverOrderItem(orderItemId);
         return ResponseEntity.ok(ApiResponse.success("Đã xác nhận phục vụ món lên bàn", response));
+    }
+
+    @PatchMapping("/items/{orderItemId}/undeliver")
+    @Operation(summary = "Hoàn tác trạng thái món về sẵn sàng bưng: DELIVERED -> SERVED")
+    public ResponseEntity<ApiResponse<OrderItemResponse>> undeliverOrderItem(@PathVariable Long orderItemId) {
+        OrderItemResponse response = orderService.updateOrderItemStatus(orderItemId, OrderItemStatus.SERVED);
+        return ResponseEntity.ok(ApiResponse.success("Đã hoàn tác món về trạng thái sẵn sàng bưng", response));
     }
 
     @PatchMapping("/orders/{orderId}/deliver-all")

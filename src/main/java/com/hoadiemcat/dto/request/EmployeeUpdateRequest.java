@@ -24,10 +24,12 @@ public class EmployeeUpdateRequest {
     @Size(max = 100, message = "Họ tên quá dài")
     private String fullName;
 
+    @jakarta.validation.constraints.Pattern(regexp = "^$|^[0-9]{9,11}$", message = "Số điện thoại chỉ được chứa ký tự số (9 đến 11 chữ số)")
     private String phone;
 
     private String role;
 
+    @jakarta.validation.constraints.Pattern(regexp = "^$|^.{8,}$", message = "Mật khẩu phải từ 8 ký tự trở lên")
     private String password;
 
     private List<String> permissions;

@@ -90,4 +90,12 @@ public class User extends BaseEntity {
      */
     @Column(name = "permissions", length = 500)
     private String permissions;
+
+    /**
+     * Số lần đăng nhập sai mật khẩu liên tiếp (chống tấn công brute-force).
+     * Khi đạt tối đa 5 lần liên tiếp, tài khoản sẽ tự động chuyển sang trạng thái INACTIVE (Tạm khóa).
+     */
+    @Column(name = "failed_login_attempts", nullable = false)
+    @Builder.Default
+    private int failedLoginAttempts = 0;
 }

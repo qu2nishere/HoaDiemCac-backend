@@ -1,6 +1,8 @@
 package com.hoadiemcat.service;
 
+import com.hoadiemcat.dto.request.TableCreateUpdateRequest;
 import com.hoadiemcat.dto.request.VerifyPasscodeRequest;
+import com.hoadiemcat.dto.response.TableQrResponse;
 import com.hoadiemcat.dto.response.VerifyPasscodeResponse;
 import com.hoadiemcat.entity.RestaurantTable;
 import com.hoadiemcat.entity.enums.TableArea;
@@ -336,5 +338,109 @@ class TableQrServiceTest {
         verify(orderItemRepository, times(1)).deleteAll(any());
         verify(orderRepository, times(1)).deleteAll(any());
         verify(cartRepository, times(1)).deleteByRestaurantTable(mockTable);
+    }
+
+    @Test
+    @DisplayName("Tạo bàn ăn mới thành công và broadcast qua WebSocket")
+    void testCreateTableSuccess() {
+        TableCreateUpdateRequest request = TableCreateUpdateRequest.builder()
+                .tableNumber("B15")
+                .name("Bàn 15 – Sảnh Hoa Đăng")
+                .area(TableArea.COMMON)
+                .capacity(4)
+                .maxActiveDevices(6)
+                .build();
+
+        when(tableRepository.existsByTableNumber("B15")).thenReturn(false);
+        when(tableRepository.save(any(RestaurantTable.class))).thenAnswer(invocation -> {
+            RestaurantTable t = invocation.getArgument(0);
+            t.setId(15L);
+            return t;
+        });
+
+        TableQrResponse response = tableQrService.createTable(request);
+
+        assertNotNull(response);
+        assertEquals("B15", response.getTableNumber());
+        assertEquals("Bàn 15 – Sảnh Hoa Đăng", response.getName());
+        assertEquals(TableArea.COMMON, response.getArea());
+        assertEquals(4, response.getCapacity());
+        assertEquals(6, response.getMaxActiveDevices());
+        assertNotNull(response.getCurrentPasscode());
+        assertNotNull(response.getCurrentSessionToken());
+        verify(tableRepository, times(1)).save(any(RestaurantTable.class));
+        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/tables"), any(TableQrResponse.class));
+    }
+
+    @Test
+    @DisplayName("Tạo bàn ăn mới ném lỗi RESOURCE_ALREADY_EXISTS khi mã bàn đã tồn tại")
+    void testCreateTableDuplicateNumberThrowsException() {
+        TableCreateUpdateRequest request = TableCreateUpdateRequest.builder()
+                .tableNumber("B01")
+                .name("Bàn 01")
+                .area(TableArea.COMMON)
+                .capacity(4)
+                .build();
+
+        when(tableRepository.existsByTableNumber("B01")).thenReturn(true);
+
+        AppException ex = assertThrows(AppException.class, () -> tableQrService.createTable(request));
+        assertEquals(ErrorCode.RESOURCE_ALREADY_EXISTS, ex.getErrorCode());
+        assertTrue(ex.getMessage().contains("B01"));
+        verify(tableRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Sinh PIN mới cho bàn đang OCCUPIED phải bảo toàn trạng thái bàn, danh sách món và tổng hóa đơn")
+    void testRegeneratePasscodePreservesOccupiedStatusAndOrders() {
+        mockTable.setStatus(TableStatus.OCCUPIED);
+        mockTable.setCurrentPasscode("1111");
+        mockTable.setCurrentSessionToken("old-session-token");
+        LocalDateTime startedAt = LocalDateTime.now().minusMinutes(10);
+        mockTable.setSessionStartedAt(startedAt);
+
+        when(tableRepository.findById(1L)).thenReturn(Optional.of(mockTable));
+        when(tableRepository.save(any(RestaurantTable.class))).thenReturn(mockTable);
+
+        // Giả lập đơn hàng của bàn với tổng hóa đơn 1.554.000 ₫
+        com.hoadiemcat.entity.Order mockOrder = com.hoadiemcat.entity.Order.builder()
+                .restaurantTable(mockTable)
+                .sessionToken("old-session-token")
+                .roundNumber(1)
+                .status(com.hoadiemcat.entity.enums.OrderStatus.COMPLETED)
+                .build();
+        mockOrder.setId(1L);
+
+        com.hoadiemcat.entity.OrderItem item = com.hoadiemcat.entity.OrderItem.builder()
+                .order(mockOrder)
+                .price(new java.math.BigDecimal("1554000"))
+                .quantity(1)
+                .totalPrice(new java.math.BigDecimal("1554000"))
+                .build();
+        mockOrder.addOrderItem(item);
+
+        when(orderRepository.findByRestaurantTableOrderByCreatedAtAsc(mockTable)).thenReturn(List.of(mockOrder));
+
+        TableQrResponse res = tableQrService.regeneratePasscode(1L);
+
+        // Xác nhận PIN và Token mới đã sinh
+        assertNotNull(res);
+        assertNotNull(res.getCurrentPasscode());
+        assertNotEquals("1111", res.getCurrentPasscode());
+        assertNotNull(res.getCurrentSessionToken());
+        assertNotEquals("old-session-token", res.getCurrentSessionToken());
+
+        // Xác nhận trạng thái bàn và các thông tin đơn hàng được bảo toàn tuyệt đối
+        assertEquals(TableStatus.OCCUPIED, res.getStatus(), "Trạng thái bàn phải được giữ nguyên là OCCUPIED");
+        assertEquals(new java.math.BigDecimal("1554000"), res.getTotalAmount(), "Tổng hóa đơn phải được bảo toàn nguyên vẹn");
+        assertEquals(1, res.getActiveOrderCount(), "Số đợt order phải được bảo toàn");
+
+        // Đảm bảo TUYỆT ĐỐI KHÔNG gọi hàm xóa order hoặc order_items
+        verify(orderRepository, never()).deleteAll(any());
+        verify(orderItemRepository, never()).deleteAll(any());
+        verify(cartRepository, never()).deleteByRestaurantTable(any());
+
+        // Xác nhận broadcast qua WebSocket
+        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/tables"), any(TableQrResponse.class));
     }
 }

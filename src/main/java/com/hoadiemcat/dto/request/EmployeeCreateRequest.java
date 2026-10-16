@@ -18,6 +18,7 @@ public class EmployeeCreateRequest {
     @Size(max = 100, message = "Họ tên quá dài")
     private String fullName;
 
+    @jakarta.validation.constraints.Pattern(regexp = "^$|^[0-9]{9,11}$", message = "Số điện thoại chỉ được chứa ký tự số (9 đến 11 chữ số)")
     private String phone;
 
     @NotBlank(message = "Vai trò không được để trống")

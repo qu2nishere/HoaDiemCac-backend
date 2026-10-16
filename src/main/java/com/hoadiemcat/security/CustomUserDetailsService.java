@@ -26,7 +26,7 @@ public class CustomUserDetailsService implements UserDetailsService {
                         .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy người dùng với tài khoản: " + usernameOrEmail)));
 
         if (user.getStatus() != Status.ACTIVE) {
-            throw new RuntimeException("Tài khoản đã bị khóa hoặc chưa kích hoạt"); // Note: You can use DisabledException or LockedException
+            throw new org.springframework.security.authentication.LockedException("Tài khoản của bạn đã bị tạm khóa, vui lòng liên hệ ban quản lý để mở lại.");
         }
 
         return new org.springframework.security.core.userdetails.User(

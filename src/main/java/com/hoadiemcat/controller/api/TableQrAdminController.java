@@ -44,7 +44,6 @@ public class TableQrAdminController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @Operation(summary = "Tạo mới một bàn ăn")
     public ResponseEntity<ApiResponse<TableQrResponse>> createTable(@Valid @RequestBody TableCreateUpdateRequest request) {
         TableQrResponse created = tableQrService.createTable(request);
@@ -52,7 +51,6 @@ public class TableQrAdminController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @Operation(summary = "Cập nhật thông tin bàn ăn")
     public ResponseEntity<ApiResponse<TableQrResponse>> updateTable(
             @PathVariable Long id,

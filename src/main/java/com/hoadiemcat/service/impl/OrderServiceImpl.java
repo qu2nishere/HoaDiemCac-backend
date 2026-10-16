@@ -4,6 +4,7 @@ import com.hoadiemcat.dto.request.CreateOrderRequest;
 import com.hoadiemcat.dto.request.OrderItemRequest;
 import com.hoadiemcat.dto.response.OrderItemResponse;
 import com.hoadiemcat.dto.response.OrderResponse;
+import com.hoadiemcat.entity.Cart;
 import com.hoadiemcat.entity.MenuItem;
 import com.hoadiemcat.entity.Order;
 import com.hoadiemcat.entity.OrderItem;
@@ -12,6 +13,7 @@ import com.hoadiemcat.entity.enums.OrderItemStatus;
 import com.hoadiemcat.entity.enums.OrderStatus;
 import com.hoadiemcat.entity.enums.TableStatus;
 import com.hoadiemcat.exception.ResourceNotFoundException;
+import com.hoadiemcat.repository.CartRepository;
 import com.hoadiemcat.repository.MenuItemRepository;
 import com.hoadiemcat.repository.OrderItemRepository;
 import com.hoadiemcat.repository.OrderRepository;
@@ -41,6 +43,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository orderItemRepository;
     private final RestaurantTableRepository restaurantTableRepository;
     private final MenuItemRepository menuItemRepository;
+    private final CartRepository cartRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     private String normalizeTableNumber(String rawTable) {
@@ -100,6 +103,16 @@ public class OrderServiceImpl implements OrderService {
         String sessionToken = request.getSessionToken();
         if (sessionToken == null || sessionToken.isBlank()) {
             sessionToken = table.getCurrentSessionToken() != null ? table.getCurrentSessionToken() : "SESSION_" + table.getTableNumber();
+        }
+
+        // Chuyển trạng thái bàn sang OCCUPIED và gắn sessionToken nếu bàn chưa phục vụ
+        if (table.getStatus() != TableStatus.OCCUPIED || table.getCurrentSessionToken() == null) {
+            table.setStatus(TableStatus.OCCUPIED);
+            table.setCurrentSessionToken(sessionToken);
+            if (table.getSessionStartedAt() == null) {
+                table.setSessionStartedAt(java.time.LocalDateTime.now());
+            }
+            restaurantTableRepository.save(table);
         }
 
         // Tính round number
@@ -165,6 +178,28 @@ public class OrderServiceImpl implements OrderService {
             log.warn("Lỗi khi bắn WebSocket order: {}", e.getMessage());
         }
 
+        // Làm rỗng giỏ hàng nháp chung của bàn sau khi đã gửi bếp thành công (UC05)
+        try {
+            if (cartRepository != null) {
+                List<Cart> carts = cartRepository.findAllByRestaurantTable(table);
+                if (!carts.isEmpty()) {
+                    cartRepository.deleteAll(carts);
+                }
+            }
+            java.util.List<?> emptyCart = java.util.Collections.emptyList();
+            if (table.getTableNumber() != null) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getTableNumber() + "/cart", emptyCart);
+            }
+            if (table.getName() != null && !table.getName().equals(table.getTableNumber())) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getName() + "/cart", emptyCart);
+            }
+            if (table.getCurrentSessionToken() != null) {
+                messagingTemplate.convertAndSend("/topic/table/" + table.getCurrentSessionToken() + "/cart", emptyCart);
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi khi làm rỗng giỏ hàng sau khi gửi order: {}", e.getMessage());
+        }
+
         return response;
     }
 
@@ -176,16 +211,20 @@ public class OrderServiceImpl implements OrderService {
                 .or(() -> restaurantTableRepository.findByName(normalized))
                 .orElse(null);
 
-        if (table != null && table.getCurrentSessionToken() != null && table.getStatus() == TableStatus.OCCUPIED) {
-            return orderRepository.findByTableNumberAndSessionTokenOrderByCreatedAtAsc(normalized, table.getCurrentSessionToken())
+        if (table != null && table.getCurrentSessionToken() != null) {
+            List<OrderResponse> sessionOrders = orderRepository.findByTableNumberAndSessionTokenOrderByCreatedAtAsc(normalized, table.getCurrentSessionToken())
                     .stream()
+                    .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
                     .map(this::mapToResponse)
                     .collect(Collectors.toList());
+            if (!sessionOrders.isEmpty()) {
+                return sessionOrders;
+            }
         }
 
         return orderRepository.findByTableNumberOrderByCreatedAtAsc(normalized)
                 .stream()
-                .filter(o -> o.getStatus() != OrderStatus.COMPLETED && o.getStatus() != OrderStatus.CANCELLED)
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -207,12 +246,18 @@ public class OrderServiceImpl implements OrderService {
 
         item.setStatus(status);
         if (status == OrderItemStatus.SERVED) {
-            item.setServedAt(LocalDateTime.now());
+            if (item.getServedAt() == null) {
+                item.setServedAt(LocalDateTime.now());
+            }
+            item.setDeliveredAt(null);
         } else if (status == OrderItemStatus.DELIVERED) {
             item.setDeliveredAt(LocalDateTime.now());
             if (item.getServedAt() == null) {
                 item.setServedAt(LocalDateTime.now());
             }
+        } else if (status == OrderItemStatus.COOKING) {
+            item.setServedAt(null);
+            item.setDeliveredAt(null);
         }
 
         OrderItem savedItem = orderItemRepository.save(item);
@@ -223,15 +268,23 @@ public class OrderServiceImpl implements OrderService {
         if (allDelivered) {
             order.setStatus(OrderStatus.COMPLETED);
             orderRepository.save(order);
+        } else if (order.getStatus() == OrderStatus.COMPLETED) {
+            order.setStatus(OrderStatus.COOKING);
+            orderRepository.save(order);
         }
 
         OrderItemResponse response = mapItemToResponse(savedItem);
 
         // Broadcast qua WebSocket tới KDS, Waiter và Table
         try {
-            String eventType = (status == OrderItemStatus.DELIVERED)
-                    ? "WAITER_ITEM_DELIVERED"
-                    : "KITCHEN_ITEM_STATUS_TOGGLED";
+            String eventType;
+            if (status == OrderItemStatus.DELIVERED) {
+                eventType = "WAITER_ITEM_DELIVERED";
+            } else if (status == OrderItemStatus.SERVED && item.getDeliveredAt() == null) {
+                eventType = "WAITER_ITEM_UNDELIVERED";
+            } else {
+                eventType = "KITCHEN_ITEM_STATUS_TOGGLED";
+            }
 
             Map<String, Object> event = Map.of(
                     "type", eventType,
