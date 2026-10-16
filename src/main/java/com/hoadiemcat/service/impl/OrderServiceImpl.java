@@ -246,12 +246,18 @@ public class OrderServiceImpl implements OrderService {
 
         item.setStatus(status);
         if (status == OrderItemStatus.SERVED) {
-            item.setServedAt(LocalDateTime.now());
+            if (item.getServedAt() == null) {
+                item.setServedAt(LocalDateTime.now());
+            }
+            item.setDeliveredAt(null);
         } else if (status == OrderItemStatus.DELIVERED) {
             item.setDeliveredAt(LocalDateTime.now());
             if (item.getServedAt() == null) {
                 item.setServedAt(LocalDateTime.now());
             }
+        } else if (status == OrderItemStatus.COOKING) {
+            item.setServedAt(null);
+            item.setDeliveredAt(null);
         }
 
         OrderItem savedItem = orderItemRepository.save(item);
@@ -262,15 +268,23 @@ public class OrderServiceImpl implements OrderService {
         if (allDelivered) {
             order.setStatus(OrderStatus.COMPLETED);
             orderRepository.save(order);
+        } else if (order.getStatus() == OrderStatus.COMPLETED) {
+            order.setStatus(OrderStatus.COOKING);
+            orderRepository.save(order);
         }
 
         OrderItemResponse response = mapItemToResponse(savedItem);
 
         // Broadcast qua WebSocket tới KDS, Waiter và Table
         try {
-            String eventType = (status == OrderItemStatus.DELIVERED)
-                    ? "WAITER_ITEM_DELIVERED"
-                    : "KITCHEN_ITEM_STATUS_TOGGLED";
+            String eventType;
+            if (status == OrderItemStatus.DELIVERED) {
+                eventType = "WAITER_ITEM_DELIVERED";
+            } else if (status == OrderItemStatus.SERVED && item.getDeliveredAt() == null) {
+                eventType = "WAITER_ITEM_UNDELIVERED";
+            } else {
+                eventType = "KITCHEN_ITEM_STATUS_TOGGLED";
+            }
 
             Map<String, Object> event = Map.of(
                     "type", eventType,
