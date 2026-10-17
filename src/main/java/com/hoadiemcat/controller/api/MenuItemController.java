@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -43,7 +44,8 @@ public class MenuItemController {
     }
 
     @PostMapping
-    @Operation(summary = "Thêm mới món ăn", description = "Tạo một món ăn mới trong thực đơn và lưu vào Database")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Thêm mới món ăn", description = "Tạo một món ăn mới trong thực đơn và lưu vào Database. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<MenuItemResponse>> createMenuItem(@Valid @RequestBody MenuItemRequest request) {
         MenuItemResponse created = menuItemService.createMenuItem(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -51,7 +53,8 @@ public class MenuItemController {
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Cập nhật món ăn", description = "Chỉnh sửa thông tin món ăn và link CDN ảnh trong Database")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Cập nhật món ăn", description = "Chỉnh sửa thông tin món ăn và link CDN ảnh trong Database. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<MenuItemResponse>> updateMenuItem(
             @PathVariable Long id,
             @Valid @RequestBody MenuItemRequest request
@@ -61,14 +64,16 @@ public class MenuItemController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Xóa món ăn", description = "Xóa mềm món ăn khỏi thực đơn nhà hàng")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Xóa món ăn", description = "Xóa mềm món ăn khỏi thực đơn nhà hàng. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<Void>> deleteMenuItem(@PathVariable Long id) {
         menuItemService.deleteMenuItem(id);
         return ResponseEntity.ok(ApiResponse.success("Đã xóa món ăn thành công", null));
     }
 
     @PatchMapping("/{id}/toggle-status")
-    @Operation(summary = "Bật/Tắt trạng thái phục vụ món ăn", description = "Chuyển đổi trạng thái Còn hàng / Hết hàng của món ăn theo thời gian thực")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Bật/Tắt trạng thái phục vụ món ăn", description = "Chuyển đổi trạng thái Còn hàng / Hết hàng của món ăn theo thời gian thực. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<MenuItemResponse>> toggleMenuItemStatus(@PathVariable Long id) {
         MenuItemResponse updated = menuItemService.toggleAvailability(id);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái món ăn thành công", updated));
@@ -86,7 +91,8 @@ public class MenuItemController {
     }
 
     @PostMapping("/categories")
-    @Operation(summary = "Thêm mới danh mục", description = "Tạo một nhóm danh mục món ăn mới vào Database")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Thêm mới danh mục", description = "Tạo một nhóm danh mục món ăn mới vào Database. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<CategoryResponse>> createCategory(@Valid @RequestBody CategoryRequest request) {
         CategoryResponse created = menuItemService.createCategory(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -94,7 +100,8 @@ public class MenuItemController {
     }
 
     @PutMapping("/categories/{id}")
-    @Operation(summary = "Cập nhật danh mục", description = "Chỉnh sửa tên, slug, thứ tự hiển thị và mô tả danh mục")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Cập nhật danh mục", description = "Chỉnh sửa tên, slug, thứ tự hiển thị và mô tả danh mục. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<CategoryResponse>> updateCategory(
             @PathVariable Long id,
             @Valid @RequestBody CategoryRequest request
@@ -104,14 +111,16 @@ public class MenuItemController {
     }
 
     @DeleteMapping("/categories/{id}")
-    @Operation(summary = "Xóa danh mục", description = "Xóa nhóm danh mục món ăn khỏi Database")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Xóa danh mục", description = "Xóa nhóm danh mục món ăn khỏi Database. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<Void>> deleteCategory(@PathVariable Long id) {
         menuItemService.deleteCategory(id);
         return ResponseEntity.ok(ApiResponse.success("Đã xóa danh mục thành công", null));
     }
 
     @PatchMapping("/categories/{id}/toggle-status")
-    @Operation(summary = "Bật/Tắt trạng thái hiển thị danh mục", description = "Ẩn hoặc hiện danh mục trên thực đơn khách hàng")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Bật/Tắt trạng thái hiển thị danh mục", description = "Ẩn hoặc hiện danh mục trên thực đơn khách hàng. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<CategoryResponse>> toggleCategoryStatus(@PathVariable Long id) {
         CategoryResponse updated = menuItemService.toggleCategoryStatus(id);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái danh mục thành công", updated));

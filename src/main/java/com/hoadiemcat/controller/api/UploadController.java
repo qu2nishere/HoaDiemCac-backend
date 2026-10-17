@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -15,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/v1/public/upload")
+@RequestMapping({"/api/v1/public/upload", "/api/v1/upload"})
 @RequiredArgsConstructor
 @Tag(name = "Upload CDN", description = "APIs tải lên hình ảnh món ăn lưu trữ CDN")
 @Slf4j
@@ -24,7 +25,8 @@ public class UploadController {
     private final UploadService uploadService;
 
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Tải ảnh món ăn lên CDN", description = "Nhận file ảnh từ máy tính, tải lên Cloudinary CDN (hoặc CDN nội bộ) và trả về link URL ảnh trực tiếp")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Tải ảnh món ăn lên CDN (UC41)", description = "Nhận file ảnh từ máy tính, tải lên Cloudinary CDN và trả về link URL ảnh trực tiếp. Yêu cầu quyền Quản trị viên (ADMIN) hoặc Quản lý (MANAGER).")
     public ResponseEntity<ApiResponse<String>> uploadImage(@RequestParam("file") MultipartFile file) {
         String fileUrl = uploadService.uploadImage(file);
         return ResponseEntity.ok(ApiResponse.success("Tải ảnh lên CDN thành công", fileUrl));
