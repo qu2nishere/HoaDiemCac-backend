@@ -29,7 +29,7 @@ public class AuditLog extends BaseEntity {
      * Tài khoản Quản lý / Nhân sự thực hiện hành động can thiệp (UC13).
      */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "actor_id", nullable = false)
+    @JoinColumn(name = "actor_id", nullable = true)
     private User actor;
 
     /**

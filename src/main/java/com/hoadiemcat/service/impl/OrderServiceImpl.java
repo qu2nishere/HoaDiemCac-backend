@@ -21,6 +21,14 @@ import com.hoadiemcat.repository.RestaurantTableRepository;
 import com.hoadiemcat.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.hoadiemcat.dto.response.TableQrResponse;
+import com.hoadiemcat.entity.AuditLog;
+import com.hoadiemcat.exception.AppException;
+import com.hoadiemcat.exception.ErrorCode;
+import com.hoadiemcat.repository.AuditLogRepository;
+import com.hoadiemcat.repository.UserRepository;
+import com.hoadiemcat.service.TableQrService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +53,9 @@ public class OrderServiceImpl implements OrderService {
     private final MenuItemRepository menuItemRepository;
     private final CartRepository cartRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AuditLogRepository auditLogRepository;
+    private final UserRepository userRepository;
+    @Lazy private final TableQrService tableQrService;
 
     private String normalizeTableNumber(String rawTable) {
         if (rawTable == null || rawTable.isBlank()) return "B01";
@@ -115,9 +126,15 @@ public class OrderServiceImpl implements OrderService {
             restaurantTableRepository.save(table);
         }
 
-        // Tính round number
-        List<Order> existingOrders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(table);
-        int roundNumber = existingOrders.size() + 1;
+        // Tính round number chuẩn theo session hiện tại của bàn
+        int roundNumber = 1;
+        if (sessionToken != null && !sessionToken.isBlank()) {
+            List<Order> sessionOrders = orderRepository.findByTableNumberAndSessionTokenOrderByCreatedAtAsc(table.getTableNumber(), sessionToken);
+            roundNumber = sessionOrders.size() + 1;
+        } else {
+            List<Order> existingOrders = orderRepository.findByRestaurantTableOrderByCreatedAtAsc(table);
+            roundNumber = existingOrders.size() + 1;
+        }
 
         Order order = Order.builder()
                 .restaurantTable(table)
@@ -211,6 +228,7 @@ public class OrderServiceImpl implements OrderService {
                 .or(() -> restaurantTableRepository.findByName(normalized))
                 .orElse(null);
 
+        List<OrderResponse> result;
         if (table != null && table.getCurrentSessionToken() != null) {
             List<OrderResponse> sessionOrders = orderRepository.findByTableNumberAndSessionTokenOrderByCreatedAtAsc(normalized, table.getCurrentSessionToken())
                     .stream()
@@ -218,15 +236,28 @@ public class OrderServiceImpl implements OrderService {
                     .map(this::mapToResponse)
                     .collect(Collectors.toList());
             if (!sessionOrders.isEmpty()) {
-                return sessionOrders;
+                result = sessionOrders;
+            } else {
+                result = orderRepository.findByTableNumberOrderByCreatedAtAsc(normalized)
+                        .stream()
+                        .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList());
             }
+        } else {
+            result = orderRepository.findByTableNumberOrderByCreatedAtAsc(normalized)
+                    .stream()
+                    .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
+                    .map(this::mapToResponse)
+                    .collect(Collectors.toList());
         }
 
-        return orderRepository.findByTableNumberOrderByCreatedAtAsc(normalized)
-                .stream()
-                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+        // Chuẩn hóa số đợt gọi món (roundNumber) tăng dần liên tục theo thứ tự thời gian gọi: 1, 2, 3...
+        for (int i = 0; i < result.size(); i++) {
+            result.get(i).setRoundNumber(i + 1);
+        }
+
+        return result;
     }
 
     @Override
@@ -246,12 +277,18 @@ public class OrderServiceImpl implements OrderService {
 
         item.setStatus(status);
         if (status == OrderItemStatus.SERVED) {
-            item.setServedAt(LocalDateTime.now());
+            if (item.getServedAt() == null) {
+                item.setServedAt(LocalDateTime.now());
+            }
+            item.setDeliveredAt(null);
         } else if (status == OrderItemStatus.DELIVERED) {
             item.setDeliveredAt(LocalDateTime.now());
             if (item.getServedAt() == null) {
                 item.setServedAt(LocalDateTime.now());
             }
+        } else if (status == OrderItemStatus.COOKING) {
+            item.setServedAt(null);
+            item.setDeliveredAt(null);
         }
 
         OrderItem savedItem = orderItemRepository.save(item);
@@ -262,15 +299,23 @@ public class OrderServiceImpl implements OrderService {
         if (allDelivered) {
             order.setStatus(OrderStatus.COMPLETED);
             orderRepository.save(order);
+        } else if (order.getStatus() == OrderStatus.COMPLETED) {
+            order.setStatus(OrderStatus.COOKING);
+            orderRepository.save(order);
         }
 
         OrderItemResponse response = mapItemToResponse(savedItem);
 
         // Broadcast qua WebSocket tới KDS, Waiter và Table
         try {
-            String eventType = (status == OrderItemStatus.DELIVERED)
-                    ? "WAITER_ITEM_DELIVERED"
-                    : "KITCHEN_ITEM_STATUS_TOGGLED";
+            String eventType;
+            if (status == OrderItemStatus.DELIVERED) {
+                eventType = "WAITER_ITEM_DELIVERED";
+            } else if (status == OrderItemStatus.SERVED && item.getDeliveredAt() == null) {
+                eventType = "WAITER_ITEM_UNDELIVERED";
+            } else {
+                eventType = "KITCHEN_ITEM_STATUS_TOGGLED";
+            }
 
             Map<String, Object> event = Map.of(
                     "type", eventType,
@@ -420,6 +465,8 @@ public class OrderServiceImpl implements OrderService {
                 .status(item.getStatus())
                 .servedAt(item.getServedAt())
                 .deliveredAt(item.getDeliveredAt())
+                .cancelledAt(item.getCancelledAt())
+                .cancelReason(item.getCancelReason())
                 .build();
     }
 
@@ -586,5 +633,192 @@ public class OrderServiceImpl implements OrderService {
                 "name", menuItem.getName(),
                 "isAvailable", true
         );
+    }
+
+    @Override
+    @Transactional
+    public OrderItemResponse updateOrderItemQuantity(Long orderItemId, int quantity, String actorUsername) {
+        if (quantity < 1 || quantity > 99) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Số lượng món phải từ 1 đến 99!");
+        }
+        OrderItem item = orderItemRepository.findById(orderItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("OrderItem", "id", orderItemId));
+
+        if (item.getStatus() == OrderItemStatus.CANCELLED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Món ăn đã bị hủy trước đó, không thể chỉnh sửa số lượng!");
+        }
+
+        int oldQuantity = item.getQuantity() != null ? item.getQuantity() : 1;
+        item.setQuantity(quantity);
+        item.setTotalPrice(item.getPrice().multiply(BigDecimal.valueOf(quantity)));
+        orderItemRepository.save(item);
+
+        Order order = item.getOrder();
+        recalculateOrderTotal(order);
+
+        // Ghi AuditLog
+        saveAdjustmentAuditLog(actorUsername, "UPDATE_QUANTITY", orderItemId,
+                String.format("Điều chỉnh số lượng món '%s' từ %d thành %d",
+                        item.getMenuItem() != null ? item.getMenuItem().getName() : "Món", oldQuantity, quantity));
+
+        // Phát WebSocket đồng bộ
+        broadcastOrderAdjustmentEvent("ORDER_ITEM_UPDATED", item, order, "Đã cập nhật số lượng món");
+
+        return mapItemToResponse(item);
+    }
+
+    @Override
+    @Transactional
+    public OrderItemResponse updateOrderItemNote(Long orderItemId, String note, String actorUsername) {
+        OrderItem item = orderItemRepository.findById(orderItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("OrderItem", "id", orderItemId));
+
+        if (item.getStatus() == OrderItemStatus.CANCELLED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Món ăn đã bị hủy, không thể sửa ghi chú!");
+        }
+
+        String oldNote = item.getNote();
+        item.setNote(note != null ? note.trim() : "");
+        orderItemRepository.save(item);
+
+        Order order = item.getOrder();
+
+        // Ghi AuditLog
+        saveAdjustmentAuditLog(actorUsername, "UPDATE_NOTE", orderItemId,
+                String.format("Cập nhật ghi chú món '%s': '%s' -> '%s'",
+                        item.getMenuItem() != null ? item.getMenuItem().getName() : "Món",
+                        oldNote != null ? oldNote : "", item.getNote()));
+
+        // Phát WebSocket đồng bộ
+        broadcastOrderAdjustmentEvent("ORDER_ITEM_UPDATED", item, order, "Đã cập nhật ghi chú món");
+
+        return mapItemToResponse(item);
+    }
+
+    @Override
+    @Transactional
+    public OrderItemResponse cancelOrderItem(Long orderItemId, String reason, String actorUsername) {
+        OrderItem item = orderItemRepository.findById(orderItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("OrderItem", "id", orderItemId));
+
+        if (item.getStatus() == OrderItemStatus.CANCELLED) {
+            return mapItemToResponse(item);
+        }
+
+        String cancelReason = (reason != null && !reason.isBlank()) ? reason.trim() : "Khách yêu cầu hủy món";
+        item.setStatus(OrderItemStatus.CANCELLED);
+        item.setCancelledAt(LocalDateTime.now());
+        item.setCancelReason(cancelReason);
+        orderItemRepository.save(item);
+
+        Order order = item.getOrder();
+        recalculateOrderTotal(order);
+
+        // Ghi AuditLog
+        saveAdjustmentAuditLog(actorUsername, "CANCEL_ORDER_ITEM", orderItemId,
+                String.format("Hủy món '%s' (SL: %d, Giá: %s). Lý do: %s",
+                        item.getMenuItem() != null ? item.getMenuItem().getName() : "Món",
+                        item.getQuantity(), item.getTotalPrice(), cancelReason));
+
+        // Phát WebSocket đồng bộ
+        broadcastOrderAdjustmentEvent("ORDER_ITEM_CANCELLED", item, order, "Món đã bị hủy: " + cancelReason);
+
+        return mapItemToResponse(item);
+    }
+
+    private void recalculateOrderTotal(Order order) {
+        if (order == null) return;
+        List<OrderItem> items = order.getOrderItems();
+        if (items != null) {
+            BigDecimal total = items.stream()
+                    .filter(i -> i.getStatus() != OrderItemStatus.CANCELLED)
+                    .map(i -> i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            order.setTotalAmount(total);
+
+            boolean allCancelled = items.stream().allMatch(i -> i.getStatus() == OrderItemStatus.CANCELLED);
+            if (allCancelled && !items.isEmpty()) {
+                order.setStatus(OrderStatus.CANCELLED);
+            } else if (order.getStatus() == OrderStatus.CANCELLED && !allCancelled) {
+                order.setStatus(OrderStatus.COOKING);
+            }
+            orderRepository.save(order);
+        }
+    }
+
+    private void saveAdjustmentAuditLog(String actorUsername, String action, Long targetId, String reason) {
+        try {
+            com.hoadiemcat.entity.User actor = null;
+            if (actorUsername != null && !actorUsername.isBlank()) {
+                actor = userRepository.findByUsername(actorUsername)
+                        .or(() -> userRepository.findByEmail(actorUsername))
+                        .orElse(null);
+            }
+            if (actor == null) {
+                actor = userRepository.findAll().stream().findFirst().orElse(null);
+            }
+
+            AuditLog logEntity = AuditLog.builder()
+                    .actor(actor)
+                    .action(action)
+                    .targetEntity("OrderItem")
+                    .targetId(targetId)
+                    .reason(reason)
+                    .build();
+            auditLogRepository.save(logEntity);
+        } catch (Exception e) {
+            log.warn("Không thể lưu AuditLog cho thao tác {}: {}", action, e.getMessage());
+        }
+    }
+
+    private void broadcastOrderAdjustmentEvent(String eventType, OrderItem item, Order order, String message) {
+        try {
+            RestaurantTable table = order != null ? order.getRestaurantTable() : null;
+            String tableNumber = table != null ? table.getTableNumber() : "";
+            String tableName = table != null ? table.getName() : "";
+
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("type", eventType);
+            payload.put("orderItemId", item.getId());
+            payload.put("orderId", order != null ? order.getId() : 0);
+            payload.put("tableNumber", tableNumber);
+            payload.put("tableName", tableName);
+            payload.put("itemName", item.getMenuItem() != null ? item.getMenuItem().getName() : "");
+            payload.put("newQuantity", item.getQuantity() != null ? item.getQuantity() : 0);
+            payload.put("newStatus", item.getStatus() != null ? item.getStatus().name() : "");
+            payload.put("note", item.getNote() != null ? item.getNote() : "");
+            payload.put("cancelReason", item.getCancelReason() != null ? item.getCancelReason() : "");
+            payload.put("message", message);
+            payload.put("timestamp", System.currentTimeMillis());
+
+            // 1. Gửi tới kênh khách hàng của bàn (đồng bộ giỏ hàng realtime)
+            if (!tableNumber.isBlank()) {
+                messagingTemplate.convertAndSend("/topic/table/" + tableNumber + "/status", payload);
+            }
+            if (!tableName.isBlank() && !tableName.equalsIgnoreCase(tableNumber)) {
+                messagingTemplate.convertAndSend("/topic/table/" + tableName + "/status", payload);
+            }
+
+            // 2. Gửi tới Bếp KDS (thẻ món cập nhật hoặc biến mất ngay)
+            messagingTemplate.convertAndSend("/topic/kitchen/orders", payload);
+
+            // 3. Gửi tới Phục vụ
+            messagingTemplate.convertAndSend("/topic/waiter/orders", payload);
+
+            // 4. Cập nhật thẻ bàn trên sơ đồ quản lý (Admin tables)
+            if (table != null && table.getId() != null) {
+                try {
+                    TableQrResponse tableResp = tableQrService.getTableById(table.getId());
+                    messagingTemplate.convertAndSend("/topic/tables", tableResp);
+                    if (!tableNumber.isBlank()) {
+                        messagingTemplate.convertAndSend("/topic/table/" + tableNumber + "/status", tableResp);
+                    }
+                } catch (Exception tEx) {
+                    log.warn("Không thể gửi cập nhật TableQrResponse qua WebSocket: {}", tEx.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi khi bắn WebSocket điều chỉnh order: {}", e.getMessage());
+        }
     }
 }

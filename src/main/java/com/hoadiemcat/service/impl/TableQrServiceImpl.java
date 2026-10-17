@@ -40,6 +40,7 @@ public class TableQrServiceImpl implements TableQrService {
     private final com.hoadiemcat.repository.CartRepository cartRepository;
     private final com.hoadiemcat.repository.CallStaffLogRepository callStaffLogRepository;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+    private final Map<Long, java.time.Instant> lastToggleLockTimeMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     @Transactional(readOnly = true)
@@ -168,6 +169,14 @@ public class TableQrServiceImpl implements TableQrService {
     @Override
     @Transactional
     public TableQrResponse toggleOrderLock(Long id) {
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant lastTime = lastToggleLockTimeMap.get(id);
+        if (lastTime != null && java.time.Duration.between(lastTime, now).toMillis() < 1000) {
+            log.warn("Phát hiện spam thao tác toggleOrderLock cho bàn ID {}. Chặn rate limit < 1s.", id);
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Thao tác quá nhanh, vui lòng chờ trong giây lát!");
+        }
+        lastToggleLockTimeMap.put(id, now);
+
         RestaurantTable table = findTableEntity(id);
         table.setIsOrderLocked(!Boolean.TRUE.equals(table.getIsOrderLocked()));
         RestaurantTable saved = tableRepository.save(table);
@@ -519,12 +528,13 @@ public class TableQrServiceImpl implements TableQrService {
     public void adminResetHost(Long tableId) {
         RestaurantTable table = findTableEntity(tableId);
         List<TableSessionDevice> devices = tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(table);
-        if (!devices.isEmpty()) {
-            for (int i = 0; i < devices.size(); i++) {
-                devices.get(i).setIsHost(i == 0);
-            }
-            tableSessionDeviceRepository.saveAll(devices);
+        if (devices.isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn chưa có thiết bị nào kết nối!");
         }
+        for (int i = 0; i < devices.size(); i++) {
+            devices.get(i).setIsHost(i == 0);
+        }
+        tableSessionDeviceRepository.saveAll(devices);
     }
 
     @Override
@@ -542,7 +552,10 @@ public class TableQrServiceImpl implements TableQrService {
             tableRepository.save(table);
 
             if (Boolean.TRUE.equals(target.getIsHost())) {
-                adminResetHost(tableId);
+                List<TableSessionDevice> remaining = tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(table);
+                if (!remaining.isEmpty()) {
+                    adminResetHost(tableId);
+                }
             }
             broadcastTableUpdate(table);
         }
@@ -645,13 +658,16 @@ public class TableQrServiceImpl implements TableQrService {
             activeOrderCount = activeOrders.size();
             totalAmount = activeOrders.stream()
                     .flatMap(o -> o.getOrderItems() != null ? o.getOrderItems().stream() : java.util.stream.Stream.empty())
+                    .filter(item -> item.getStatus() != com.hoadiemcat.entity.enums.OrderItemStatus.CANCELLED)
                     .map(item -> item.getPrice() != null && item.getQuantity() != null
                             ? item.getPrice().multiply(java.math.BigDecimal.valueOf(item.getQuantity()))
                             : java.math.BigDecimal.ZERO)
                     .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
 
             activeItemCount = activeOrders.stream()
-                    .mapToInt(o -> o.getOrderItems() != null ? o.getOrderItems().size() : 0)
+                    .flatMap(o -> o.getOrderItems() != null ? o.getOrderItems().stream() : java.util.stream.Stream.empty())
+                    .filter(item -> item.getStatus() != com.hoadiemcat.entity.enums.OrderItemStatus.CANCELLED)
+                    .mapToInt(item -> item.getQuantity() != null ? item.getQuantity() : 0)
                     .sum();
 
             if (pendingLogs != null) {

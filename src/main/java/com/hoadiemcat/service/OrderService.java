@@ -29,4 +29,10 @@ public interface OrderService {
     java.util.Map<String, Object> reportOutOfStock(Long orderItemId, Long menuItemId, String reason);
 
     java.util.Map<String, Object> restockMenuItem(Long menuItemId);
+
+    OrderItemResponse updateOrderItemQuantity(Long orderItemId, int quantity, String actorUsername);
+
+    OrderItemResponse updateOrderItemNote(Long orderItemId, String note, String actorUsername);
+
+    OrderItemResponse cancelOrderItem(Long orderItemId, String reason, String actorUsername);
 }
