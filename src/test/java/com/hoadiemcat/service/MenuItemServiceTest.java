@@ -7,6 +7,7 @@ import com.hoadiemcat.dto.response.MenuItemResponse;
 import com.hoadiemcat.entity.Category;
 import com.hoadiemcat.entity.MenuItem;
 import com.hoadiemcat.exception.AppException;
+import com.hoadiemcat.exception.ErrorCode;
 import com.hoadiemcat.exception.ResourceNotFoundException;
 import com.hoadiemcat.repository.CategoryRepository;
 import com.hoadiemcat.repository.MenuItemRepository;
@@ -289,5 +290,39 @@ class MenuItemServiceTest {
 
         assertTrue(testItem.getIsDeleted());
         verify(menuItemRepository, times(1)).save(testItem);
+    }
+
+    @Test
+    @DisplayName("Tạo món ăn với đơn giá linh hoạt không bắt buộc tận cùng bằng 000 (VD: 189500)")
+    void testCreateMenuItem_FlexiblePriceWithout000Ending() {
+        MenuItemRequest request = MenuItemRequest.builder()
+                .code("M101")
+                .name("Canh Gà Hầm Nấm 500đ")
+                .price(new BigDecimal("189500"))
+                .categoryId("nuoc-lau")
+                .build();
+
+        when(menuItemRepository.existsByCode("M101")).thenReturn(false);
+        when(categoryRepository.findBySlug("nuoc-lau")).thenReturn(Optional.of(testCategory));
+        when(menuItemRepository.save(any(MenuItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MenuItemResponse response = menuItemService.createMenuItem(request);
+
+        assertNotNull(response);
+        assertEquals(new BigDecimal("189500"), response.getPrice());
+    }
+
+    @Test
+    @DisplayName("Ném lỗi khi tạo món ăn vượt quá giới hạn trần Decimal(15,2) (1.000.000.000.000 ₫)")
+    void testCreateMenuItem_ExceedsMaxPriceLimit() {
+        MenuItemRequest request = MenuItemRequest.builder()
+                .code("M102")
+                .name("Món Ăn Vô Giá")
+                .price(new BigDecimal("1000000000001"))
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () -> menuItemService.createMenuItem(request));
+        assertEquals(ErrorCode.INVALID_REQUEST, ex.getErrorCode());
+        assertTrue(ex.getMessage().contains("1.000.000.000.000"));
     }
 }

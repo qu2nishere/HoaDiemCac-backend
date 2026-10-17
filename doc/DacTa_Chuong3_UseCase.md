@@ -923,7 +923,7 @@ QL -- UC40
 | Basic Flow | 1. Quản lý bấm nút "+ Thêm Món Ăn Mới" (hoặc nút Chỉnh sửa trên dòng món).<br>2. Nhập các trường: Tên món ăn (*), Danh mục, Đơn vị tính, Giá bán (*), Mô tả và chọn ảnh minh họa.<br>3. Bấm "Lưu Món Ăn".<br>4. Hệ thống tải ảnh lên CDN (UC41) nếu có chọn file từ máy, lưu bản ghi vào Database và đóng modal.<br>5. Hiển thị thông báo Toast thành công và làm mới danh sách. |
 | Alternative Flow | 1a. Xóa món ăn: Quản lý bấm nút Thùng rác, xác nhận hộp thoại `window.confirm`, hệ thống gọi API xóa món khỏi Database. |
 | Exception Flow | 3a. Bỏ trống Tên hoặc Giá <= 0: Hệ thống chặn submit và báo lỗi màu đỏ tương ứng. |
-| Business Rules | - BR24.1: Tên món không được để trống, giá bán phải lớn hơn 0 ₫. |
+| Business Rules | - BR24.1: Tên món không được để trống, giá bán phải lớn hơn 0 ₫, cho phép nhập mọi mức giá linh hoạt (không bắt buộc tận cùng bằng 000) và không vượt quá giới hạn an toàn của DECIMAL(15,2) trong MySQL (tối đa 1.000.000.000.000 ₫ - 1.000 tỷ). |
 | Non-Functional Requirement | - NFR24.1: Xử lý lưu món và ảnh CDN hoàn tất trong dưới 2 giây. |
 
 ---

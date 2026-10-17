@@ -1,5 +1,6 @@
 package com.hoadiemcat.dto.request;
 
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,7 +29,8 @@ public class MenuItemRequest {
     private String description;
 
     @NotNull(message = "Giá món ăn không được để trống")
-    @DecimalMin(value = "0.0", inclusive = true, message = "Giá món ăn phải lớn hơn hoặc bằng 0")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Giá món ăn phải lớn hơn 0 ₫")
+    @DecimalMax(value = "1000000000000.00", message = "Giá món ăn không được vượt quá 1.000.000.000.000 ₫")
     private BigDecimal price;
 
     @Size(max = 50, message = "Đơn vị tính tối đa 50 ký tự")

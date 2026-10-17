@@ -18,6 +18,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -34,6 +35,19 @@ public class MenuItemServiceImpl implements MenuItemService {
     private final MenuItemRepository menuItemRepository;
     private final CategoryRepository categoryRepository;
     private final SimpMessagingTemplate messagingTemplate;
+
+    private static final BigDecimal MAX_PRICE_LIMIT = new BigDecimal("1000000000000");
+
+    private void validatePrice(BigDecimal price) {
+        if (price != null) {
+            if (price.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Giá món ăn phải lớn hơn 0 ₫");
+            }
+            if (price.compareTo(MAX_PRICE_LIMIT) > 0) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Giá món ăn không được vượt quá 1.000.000.000.000 ₫ (1.000 tỷ VNĐ)");
+            }
+        }
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -96,6 +110,7 @@ public class MenuItemServiceImpl implements MenuItemService {
     @Override
     @Transactional
     public MenuItemResponse createMenuItem(MenuItemRequest request) {
+        validatePrice(request.getPrice());
         String code = request.getCode();
         if (code == null || code.isBlank()) {
             code = "M" + (System.currentTimeMillis() % 1000000);
@@ -150,6 +165,7 @@ public class MenuItemServiceImpl implements MenuItemService {
         }
 
         if (request.getPrice() != null) {
+            validatePrice(request.getPrice());
             item.setPrice(request.getPrice());
         }
 
