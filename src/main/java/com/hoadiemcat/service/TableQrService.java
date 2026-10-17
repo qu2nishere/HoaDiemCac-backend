@@ -51,4 +51,6 @@ public interface TableQrService {
     void resolveCallStaff(Long tableId);
 
     void resolveCallStaff(Long tableId, com.hoadiemcat.entity.enums.CallStaffType type);
+    
+    void resetAllTables();
 }

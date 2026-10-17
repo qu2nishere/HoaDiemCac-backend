@@ -67,6 +67,13 @@ public class TableQrAdminController {
         return ResponseEntity.ok(ApiResponse.success("Đã sinh mã PIN 4 số mới cho bàn", updated));
     }
 
+    @PostMapping("/reset-all")
+    @Operation(summary = "Reset toàn bộ bàn ăn về AVAILABLE và xóa sạch đơn hàng/thiết bị cũ (Dành cho Testing / Admin)")
+    public ResponseEntity<ApiResponse<Void>> resetAllTables() {
+        tableQrService.resetAllTables();
+        return ResponseEntity.ok(ApiResponse.success("Đã làm sạch và đưa toàn bộ bàn ăn về trạng thái sẵn sàng đón khách!", null));
+    }
+
     @PostMapping("/{id}/toggle-order-lock")
     @Operation(summary = "Khóa hoặc mở khóa quyền gọi món khẩn cấp của bàn")
     public ResponseEntity<ApiResponse<TableQrResponse>> toggleOrderLock(@PathVariable Long id) {
