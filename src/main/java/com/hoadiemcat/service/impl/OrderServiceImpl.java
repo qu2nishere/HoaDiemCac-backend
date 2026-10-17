@@ -161,7 +161,7 @@ public class OrderServiceImpl implements OrderService {
             }
 
             BigDecimal itemPrice = itemReq.getPrice() != null ? itemReq.getPrice() : menuItem.getPrice();
-            int qty = itemReq.getQuantity() != null ? itemReq.getQuantity() : 1;
+            int qty = itemReq.getQuantity() != null ? Math.min(Math.max(itemReq.getQuantity(), 1), 99) : 1;
             BigDecimal subtotal = itemPrice.multiply(BigDecimal.valueOf(qty));
             total = total.add(subtotal);
 
