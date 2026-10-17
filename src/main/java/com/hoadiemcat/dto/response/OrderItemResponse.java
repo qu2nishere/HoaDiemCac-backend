@@ -24,4 +24,6 @@ public class OrderItemResponse {
     private OrderItemStatus status;
     private LocalDateTime servedAt;
     private LocalDateTime deliveredAt;
+    private LocalDateTime cancelledAt;
+    private String cancelReason;
 }

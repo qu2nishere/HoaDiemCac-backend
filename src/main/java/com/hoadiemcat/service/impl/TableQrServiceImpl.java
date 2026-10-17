@@ -658,13 +658,16 @@ public class TableQrServiceImpl implements TableQrService {
             activeOrderCount = activeOrders.size();
             totalAmount = activeOrders.stream()
                     .flatMap(o -> o.getOrderItems() != null ? o.getOrderItems().stream() : java.util.stream.Stream.empty())
+                    .filter(item -> item.getStatus() != com.hoadiemcat.entity.enums.OrderItemStatus.CANCELLED)
                     .map(item -> item.getPrice() != null && item.getQuantity() != null
                             ? item.getPrice().multiply(java.math.BigDecimal.valueOf(item.getQuantity()))
                             : java.math.BigDecimal.ZERO)
                     .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
 
             activeItemCount = activeOrders.stream()
-                    .mapToInt(o -> o.getOrderItems() != null ? o.getOrderItems().size() : 0)
+                    .flatMap(o -> o.getOrderItems() != null ? o.getOrderItems().stream() : java.util.stream.Stream.empty())
+                    .filter(item -> item.getStatus() != com.hoadiemcat.entity.enums.OrderItemStatus.CANCELLED)
+                    .mapToInt(item -> item.getQuantity() != null ? item.getQuantity() : 0)
                     .sum();
 
             if (pendingLogs != null) {
