@@ -528,12 +528,13 @@ public class TableQrServiceImpl implements TableQrService {
     public void adminResetHost(Long tableId) {
         RestaurantTable table = findTableEntity(tableId);
         List<TableSessionDevice> devices = tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(table);
-        if (!devices.isEmpty()) {
-            for (int i = 0; i < devices.size(); i++) {
-                devices.get(i).setIsHost(i == 0);
-            }
-            tableSessionDeviceRepository.saveAll(devices);
+        if (devices.isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bàn chưa có thiết bị nào kết nối!");
         }
+        for (int i = 0; i < devices.size(); i++) {
+            devices.get(i).setIsHost(i == 0);
+        }
+        tableSessionDeviceRepository.saveAll(devices);
     }
 
     @Override
@@ -551,7 +552,10 @@ public class TableQrServiceImpl implements TableQrService {
             tableRepository.save(table);
 
             if (Boolean.TRUE.equals(target.getIsHost())) {
-                adminResetHost(tableId);
+                List<TableSessionDevice> remaining = tableSessionDeviceRepository.findByTableAndIsActiveTrueOrderByConnectedAtAsc(table);
+                if (!remaining.isEmpty()) {
+                    adminResetHost(tableId);
+                }
             }
             broadcastTableUpdate(table);
         }
